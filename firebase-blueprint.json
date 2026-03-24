@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "Freight": {
+      "title": "Freight",
+      "description": "Contrato de frete geral",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string", "description": "Descrição do frete (ex: Soja - Fazenda X)" },
+        "product": { "type": "string", "description": "Produto" },
+        "origin": { "type": "string", "description": "Origem" },
+        "destination": { "type": "string", "description": "Destino" },
+        "totalWeight": { "type": "number", "description": "Peso total contratado (kg)" },
+        "status": { "type": "string", "enum": ["Aberto", "Finalizado"], "description": "Status do frete" },
+        "date": { "type": "string", "format": "date-time", "description": "Data de criação" }
+      },
+      "required": ["description", "product", "totalWeight", "status", "date"]
+    },
+    "Loading": {
+      "title": "Loading",
+      "description": "Registro de carregamento de caminhão",
+      "type": "object",
+      "properties": {
+        "freightId": { "type": "string", "description": "ID do frete vinculado" },
+        "driverName": { "type": "string", "description": "Nome do motorista" },
+        "plate": { "type": "string", "description": "Placa do veículo" },
+        "weight": { "type": "number", "description": "Peso carregado (kg/ton)" },
+        "manifestoDone": { "type": "boolean", "description": "Manifesto emitido?" },
+        "unloaded": { "type": "boolean", "description": "Carga descarregada?" },
+        "date": { "type": "string", "format": "date-time", "description": "Data do registro" }
+      },
+      "required": ["freightId", "driverName", "plate", "weight", "date"]
+    }
+  },
+  "firestore": {
+    "/freights": { "schema": "Freight", "description": "Coleção de fretes" },
+    "/loadings": { "schema": "Loading", "description": "Coleção de carregamentos" }
+  }
+}

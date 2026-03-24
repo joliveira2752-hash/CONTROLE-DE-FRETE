@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((request.auth.token.email == "joliveira2752@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidFreight(data) {
+      return data.description is string && data.description.size() > 0 && data.description.size() < 100 &&
+             data.product is string && data.product.size() < 50 &&
+             data.origin is string && data.origin.size() < 100 &&
+             data.destination is string && data.destination.size() < 100 &&
+             data.totalWeight is number && data.totalWeight >= 0 &&
+             data.status in ["Aberto", "Finalizado"];
+    }
+
+    function isValidLoading(data, isCreate) {
+      // For updates, we allow freightId to be missing if it was an old document
+      // But for creates, it's mandatory
+      let hasFreightId = 'freightId' in data && data.freightId is string && data.freightId.size() > 0;
+      let validFreightId = isCreate ? hasFreightId : (hasFreightId || !('freightId' in data));
+      
+      return validFreightId &&
+             data.driverName is string && data.driverName.size() > 0 && data.driverName.size() < 100 &&
+             data.plate is string && data.plate.size() > 0 && data.plate.size() < 20 &&
+             data.weight is number && data.weight >= 0 &&
+             data.manifestoDone is bool &&
+             data.unloaded is bool;
+    }
+
+    match /freights/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidFreight(request.resource.data);
+      allow update: if isAuthenticated() && isValidFreight(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /loadings/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidLoading(request.resource.data, true);
+      allow update: if isAuthenticated() && isValidLoading(request.resource.data, false);
+      allow delete: if isAdmin();
+    }
+    
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+  }
+}
