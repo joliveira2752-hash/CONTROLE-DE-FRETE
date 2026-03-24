@@ -136,8 +136,11 @@ function MainApp() {
   const [editPlate, setEditPlate] = useState('');
   const [editWeight, setEditWeight] = useState('');
 
+  const [authError, setAuthError] = useState<string | null>(null);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log("Auth State Changed:", user ? `Logged in as ${user.email}` : "Logged out");
       setUser(user);
       setLoading(false);
     });
@@ -147,12 +150,21 @@ function MainApp() {
   useEffect(() => {
     if (!user) return;
 
+    console.log("Setting up snapshots for user:", user.email);
     const unsubLoadings = onSnapshot(query(collection(db, 'loadings'), orderBy('date', 'desc')), (snapshot) => {
+      console.log("Loadings snapshot received:", snapshot.size, "docs");
       setLoadings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Loading)));
+    }, (error) => {
+      console.error("Loadings snapshot error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'loadings');
     });
 
     const unsubFreights = onSnapshot(query(collection(db, 'freights'), orderBy('date', 'desc')), (snapshot) => {
+      console.log("Freights snapshot received:", snapshot.size, "docs");
       setFreights(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Freight)));
+    }, (error) => {
+      console.error("Freights snapshot error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'freights');
     });
 
     return () => {
@@ -161,7 +173,17 @@ function MainApp() {
     };
   }, [user]);
 
-  const handleLogin = () => signInWithPopup(auth, new GoogleAuthProvider());
+  const handleLogin = async () => {
+    setAuthError(null);
+    try {
+      console.log("Starting Google Login...");
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      console.log("Login successful");
+    } catch (error: any) {
+      console.error("Login error:", error);
+      setAuthError(error.message || "Erro ao fazer login");
+    }
+  };
   const handleLogout = () => signOut(auth);
 
   const handleSubmitFreight = async (e: React.FormEvent) => {
@@ -278,21 +300,38 @@ function MainApp() {
 
   const exportToCSV = (data: any[], filename: string) => {
     if (data.length === 0) return;
-    const headers = Object.keys(data[0]).join(',');
-    const rows = data.map(obj => 
-      Object.values(obj).map(val => 
-        typeof val === 'string' ? `"${val.replace(/"/g, '""')}"` : val
-      ).join(',')
+    
+    // Get all unique keys from all objects to ensure consistent columns
+    const allKeys = Array.from(new Set(data.flatMap(item => Object.keys(item))));
+    
+    const headers = allKeys.join(',');
+    const rows = data.map(item => 
+      allKeys.map(key => {
+        let val = item[key];
+        if (val === undefined || val === null) return '""';
+        if (typeof val === 'object') {
+          try {
+            val = JSON.stringify(val);
+          } catch (e) {
+            val = String(val);
+          }
+        }
+        const str = String(val);
+        // Escape double quotes by doubling them and wrap in quotes
+        return `"${str.replace(/"/g, '""')}"`;
+      }).join(',')
     ).join('\n');
     
-    const csvContent = `data:text/csv;charset=utf-8,${headers}\n${rows}`;
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = `${headers}\n${rows}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", `${filename}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
@@ -311,6 +350,14 @@ function MainApp() {
           <button onClick={handleLogin} className="w-full bg-white text-black font-bold py-4 rounded-2xl hover:bg-green-500 transition-all shadow-lg">
             Entrar com Google
           </button>
+          <p className="text-[10px] text-zinc-600 uppercase font-bold tracking-widest">
+            Certifique-se de permitir pop-ups no seu navegador
+          </p>
+          {authError && (
+            <p className="text-red-500 text-sm bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+              {authError}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -373,576 +420,640 @@ function MainApp() {
   }));
 
   return (
-    <div className="min-h-screen bg-black text-zinc-400 font-sans pb-20">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-md border-b border-zinc-900 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-              <Package className="w-5 h-5 text-black" />
-            </div>
-            <h1 className="text-white font-black tracking-tighter uppercase text-xl">Controle de Fretes</h1>
+    <div className="min-h-screen bg-black text-zinc-400 font-sans flex flex-col md:flex-row">
+      {/* Sidebar */}
+      <aside className="w-full md:w-64 bg-zinc-950 border-r border-zinc-900 p-6 space-y-8 md:sticky md:top-0 md:h-screen overflow-y-auto z-50">
+        <div className="flex items-center gap-3 mb-10">
+          <div className="w-10 h-10 bg-green-500 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/20">
+            <Package className="w-6 h-6 text-black" />
           </div>
-          <button onClick={handleLogout} className="p-2 hover:bg-zinc-900 rounded-full transition-colors">
+          <h1 className="text-white font-black tracking-tighter uppercase text-xl leading-none">Controle<br/><span className="text-green-500">Fretes</span></h1>
+        </div>
+
+        <nav className="space-y-2">
+          <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+          <SidebarItem icon={ClipboardList} label="Cadastrar Frete" active={activeTab === 'freights'} onClick={() => setActiveTab('freights')} />
+          <SidebarItem icon={Plus} label="Novo Carregamento" active={activeTab === 'loadings'} onClick={() => setActiveTab('loadings')} />
+          <SidebarItem icon={FileText} label="Relatórios" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
+        </nav>
+
+        <div className="pt-10 border-t border-zinc-900">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-zinc-500 hover:text-red-500 hover:bg-red-500/5 transition-all">
             <LogOut className="w-5 h-5" />
+            <span className="text-sm font-medium">Sair da Conta</span>
           </button>
         </div>
-      </header>
+      </aside>
 
-      <main className="max-w-5xl mx-auto p-6 space-y-10">
-        {/* Summary */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <SummaryCard label="Peso Total" value={`${totalWeight.toLocaleString()} kg`} color="text-green-500" />
-          <SummaryCard label="Fretes Abertos" value={openFreights.toString()} color="text-blue-500" />
-          <SummaryCard label="Manifesto Pendente" value={pendingManifesto.toString()} color="text-orange-500" />
-          <SummaryCard label="Finalizados" value={totalCompleted.toString()} color="text-zinc-100" />
-        </section>
+      <main className="flex-1 p-6 md:p-10 space-y-10 overflow-y-auto">
+        {activeTab === 'dashboard' && (
+          <>
+            {/* Summary */}
+            <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <SummaryCard label="Peso Total" value={`${totalWeight.toLocaleString()} kg`} color="text-green-500" />
+              <SummaryCard label="Fretes Abertos" value={openFreights.toString()} color="text-blue-500" />
+              <SummaryCard label="Manifesto Pendente" value={pendingManifesto.toString()} color="text-orange-500" />
+              <SummaryCard label="Finalizados" value={totalCompleted.toString()} color="text-zinc-100" />
+            </section>
 
-        {/* Freight Registration */}
-        <section className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-8">
-          <h2 className="text-white font-bold mb-6 flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-blue-500" /> Cadastrar Novo Frete
-          </h2>
-          <form onSubmit={handleSubmitFreight} className="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <div className="md:col-span-2 space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Descrição</label>
-              <input 
-                type="text" 
-                placeholder="Ex: Soja - Fazenda Sol"
-                value={freightDesc}
-                onChange={(e) => setFreightDesc(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Produto</label>
-              <input 
-                type="text" 
-                placeholder="Ex: Soja"
-                value={freightProduct}
-                onChange={(e) => setFreightProduct(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Origem</label>
-              <input 
-                type="text" 
-                placeholder="Ex: Sorriso-MT"
-                value={freightOrigin}
-                onChange={(e) => setFreightOrigin(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Destino</label>
-              <input 
-                type="text" 
-                placeholder="Ex: Santos-SP"
-                value={freightDestination}
-                onChange={(e) => setFreightDestination(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Peso Total (kg)</label>
-              <input 
-                type="number" 
-                placeholder="0"
-                value={freightTotalWeight}
-                onChange={(e) => setFreightTotalWeight(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
-              />
-            </div>
-            <div className="md:col-span-6 flex justify-end">
-              <button 
-                disabled={isSubmittingFreight}
-                className="w-full md:w-auto px-12 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
-              >
-                {isSubmittingFreight ? 'Salvando...' : 'Criar Frete'}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        {/* Loading Registration */}
-        <section className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-8">
-          <h2 className="text-white font-bold mb-6 flex items-center gap-2">
-            <Plus className="w-5 h-5 text-green-500" /> Novo Carregamento (Motorista)
-          </h2>
-          <form onSubmit={handleSubmitLoading} className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Selecionar Frete</label>
-              <select 
-                value={selectedFreightId}
-                onChange={(e) => setSelectedFreightId(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none"
-              >
-                <option value="">Selecione...</option>
-                {freights.filter(f => f.status === 'Aberto').map(f => (
-                  <option key={f.id} value={f.id}>{f.description}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Motorista</label>
-              <div className="relative">
-                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
-                <input 
-                  type="text" 
-                  placeholder="Nome"
-                  value={driverName}
-                  onChange={(e) => setDriverName(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none transition-all"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Placa</label>
-              <div className="relative">
-                <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
-                <input 
-                  type="text" 
-                  placeholder="ABC-1234"
-                  value={plate}
-                  onChange={(e) => setPlate(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none transition-all"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Peso (kg)</label>
-              <div className="relative">
-                <Weight className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
-                <input 
-                  type="number" 
-                  placeholder="0"
-                  value={weight}
-                  onChange={(e) => setWeight(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none transition-all"
-                />
-              </div>
-            </div>
-            <div className="flex items-end">
-              <button 
-                disabled={isSubmittingLoading}
-                className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-black font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-900/20"
-              >
-                {isSubmittingLoading ? 'Salvando...' : 'Cadastrar'}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        {/* List Section */}
-        <section className="space-y-4">
-          <h2 className="text-white font-bold flex items-center gap-2 px-2">
-            <LayoutDashboard className="w-5 h-5 text-green-500" /> Carregamentos Recentes
-          </h2>
-          <div className="grid grid-cols-1 gap-4">
-            {loadings.map((loading) => {
-              const freight = freights.find(f => f.id === loading.freightId);
-              return (
-                <div key={loading.id} className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-zinc-700 transition-all">
-                  {editingId === loading.id ? (
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-                      <input 
-                        type="text" 
-                        value={editDriverName}
-                        onChange={(e) => setEditDriverName(e.target.value)}
-                        className="bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none"
-                        placeholder="Motorista"
-                      />
-                      <input 
-                        type="text" 
-                        value={editPlate}
-                        onChange={(e) => setEditPlate(e.target.value)}
-                        className="bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none"
-                        placeholder="Placa"
-                      />
-                      <input 
-                        type="number" 
-                        value={editWeight}
-                        onChange={(e) => setEditWeight(e.target.value)}
-                        className="bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none"
-                        placeholder="Peso"
-                      />
-                      <div className="md:col-span-3 flex justify-end gap-2">
-                        <button onClick={cancelEditing} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-white transition-colors">Cancelar</button>
-                        <button onClick={() => saveEdit(loading.id)} className="px-4 py-2 bg-green-600 text-black text-xs font-bold rounded-lg hover:bg-green-500 transition-colors">Salvar Alterações</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-6 w-full md:w-auto">
-                        <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-green-500">
-                          <Truck className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-white font-bold">{loading.driverName}</h3>
-                            {freight && (
-                              <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20">
-                                {freight.description}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
-                            <span className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-300 font-mono">{loading.plate}</span>
-                            <span>•</span>
-                            <span>{loading.weight.toLocaleString()} kg</span>
-                            <span>•</span>
-                            <span>{format(parseISO(loading.date), 'dd/MM HH:mm')}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+            {/* Performance Dashboard */}
+            {(freightPerformance.length > 0 || loadings.length > 0) && (
+              <section className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-8">
+                <div className="flex flex-col lg:flex-row gap-12">
+                  {/* Funnel Section */}
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-8">
+                      <h2 className="text-white font-bold flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-green-500" /> Fluxo de Operação (Funil)
+                      </h2>
+                      <div className="flex gap-4">
                         <div className="flex items-center gap-2">
-                          <StatusButton 
-                            active={loading.manifestoDone} 
-                            label="Manifesto" 
-                            onClick={() => toggleStatus(loading.id, 'manifestoDone', loading.manifestoDone)}
-                          />
-                          <StatusButton 
-                            active={loading.unloaded} 
-                            label="Descarregado" 
-                            onClick={() => toggleStatus(loading.id, 'unloaded', loading.unloaded)}
-                          />
+                          <div className="w-2 h-2 rounded-full bg-zinc-700" />
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold">Planejado</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <button 
-                            onClick={() => startEditing(loading)}
-                            className="p-2 text-zinc-700 hover:text-blue-500 transition-colors"
-                            title="Editar"
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold">Carregado</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-blue-500" />
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold">Descarregado</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="h-[400px] w-full relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <FunnelChart>
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
+                            itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                            formatter={(value: number, name: string, props: any) => [
+                              `${value.toLocaleString()} kg`, 
+                              `${props.payload.name} (${props.payload.sub})`
+                            ]}
+                          />
+                          <Funnel
+                            data={funnelData}
+                            dataKey="value"
+                            isAnimationActive
                           >
-                            <FileText className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setDeletingId(loading.id);
-                              setDeletingType('loading');
-                            }}
-                            className="p-2 text-zinc-700 hover:text-red-500 transition-colors"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-            {loadings.length === 0 && (
-              <div className="text-center py-20 border-2 border-dashed border-zinc-900 rounded-3xl">
-                <p className="text-zinc-600">Nenhum carregamento registrado.</p>
-              </div>
-            )}
-          </div>
-        </section>
+                            {funnelData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                            <LabelList 
+                              position="center" 
+                              fill="#fff" 
+                              stroke="none" 
+                              dataKey="name" 
+                              style={{ fontWeight: 'bold', fontSize: '14px' }}
+                            />
+                            <LabelList 
+                              position="right" 
+                              fill="#71717a" 
+                              stroke="none" 
+                              dataKey="sub" 
+                              style={{ fontSize: '10px', fontWeight: 'bold' }}
+                            />
+                          </Funnel>
+                        </FunnelChart>
+                      </ResponsiveContainer>
+                    </div>
 
-        {/* Freights List */}
-        <section className="space-y-4">
-          <h2 className="text-white font-bold flex items-center gap-2 px-2">
-            <TrendingUp className="w-5 h-5 text-blue-500" /> Fretes em Andamento
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {freights.map((f) => {
-              const relatedLoadings = loadings.filter(l => l.freightId === f.id);
-              const loadedWeight = relatedLoadings.reduce((acc, curr) => acc + curr.weight, 0);
-              const progress = Math.min((loadedWeight / f.totalWeight) * 100, 100);
-
-              return (
-                <div key={f.id} className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-6 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-white font-bold">{f.description}</h3>
-                      <p className="text-xs text-zinc-500">{f.product} • {f.totalWeight.toLocaleString()} kg total</p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-600">
-                        <span className="bg-zinc-800 px-1.5 py-0.5 rounded">{f.origin}</span>
-                        <ChevronRight className="w-3 h-3" />
-                        <span className="bg-zinc-800 px-1.5 py-0.5 rounded">{f.destination}</span>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => {
-                        setDeletingId(f.id);
-                        setDeletingType('freight');
-                      }}
-                      className="text-zinc-700 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
-                      <span className="text-zinc-600">Progresso</span>
-                      <span className="text-blue-400">{loadedWeight.toLocaleString()} / {f.totalWeight.toLocaleString()} kg</span>
-                    </div>
-                    <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-blue-500 transition-all duration-500" 
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-[10px] text-zinc-600">
-                    <Truck className="w-3 h-3" />
-                    <span>{relatedLoadings.length} caminhões carregados</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Performance Dashboard */}
-        {(freightPerformance.length > 0 || loadings.length > 0) && (
-          <section className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-8">
-            <div className="flex flex-col lg:flex-row gap-12">
-              {/* Funnel Section */}
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-white font-bold flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-green-500" /> Fluxo de Operação (Funil)
-                  </h2>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-zinc-700" />
-                      <span className="text-[10px] text-zinc-500 uppercase font-bold">Planejado</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
-                      <span className="text-[10px] text-zinc-500 uppercase font-bold">Carregado</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-[10px] text-zinc-500 uppercase font-bold">Descarregado</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="h-[400px] w-full relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <FunnelChart>
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
-                        itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                        formatter={(value: number, name: string, props: any) => [
-                          `${value.toLocaleString()} kg`, 
-                          `${props.payload.name} (${props.payload.sub})`
-                        ]}
-                      />
-                      <Funnel
-                        data={funnelData}
-                        dataKey="value"
-                        isAnimationActive
-                      >
-                        {funnelData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                        <LabelList 
-                          position="center" 
-                          fill="#fff" 
-                          stroke="none" 
-                          dataKey="name" 
-                          style={{ fontWeight: 'bold', fontSize: '14px' }}
-                        />
-                        <LabelList 
-                          position="right" 
-                          fill="#71717a" 
-                          stroke="none" 
-                          dataKey="sub" 
-                          style={{ fontSize: '10px', fontWeight: 'bold' }}
-                        />
-                      </Funnel>
-                    </FunnelChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Driver Funnel */}
-                <div className="mt-12">
-                  <h2 className="text-white font-bold mb-8 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-blue-500" /> Top 5 Motoristas (Funil de Volume)
-                  </h2>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <FunnelChart>
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
-                          itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                          formatter={(value: number, name: string, props: any) => [
-                            `${value.toLocaleString()} kg`, 
-                            `${props.payload.name} (${props.payload.sub})`
-                          ]}
-                        />
-                        <Funnel
-                          data={driverFunnelData}
-                          dataKey="value"
-                        >
-                          {driverFunnelData.map((entry, index) => (
-                            <Cell key={`cell-driver-${index}`} fill={entry.fill} />
-                          ))}
-                          <LabelList 
-                            position="center" 
-                            fill="#fff" 
-                            stroke="none" 
-                            dataKey="name" 
-                            style={{ fontSize: '11px', fontWeight: 'bold' }}
-                          />
-                        </Funnel>
-                      </FunnelChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Freight Funnel */}
-                <div className="mt-12">
-                  <h2 className="text-white font-bold mb-8 flex items-center gap-2">
-                    <Package className="w-5 h-5 text-purple-500" /> Top 5 Fretes (Funil de Volume)
-                  </h2>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <FunnelChart>
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
-                          itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                          formatter={(value: number, name: string, props: any) => [
-                            `${value.toLocaleString()} kg`, 
-                            `${props.payload.name} (${props.payload.sub})`
-                          ]}
-                        />
-                        <Funnel
-                          data={freightFunnelData}
-                          dataKey="value"
-                        >
-                          {freightFunnelData.map((entry, index) => (
-                            <Cell key={`cell-freight-${index}`} fill={entry.fill} />
-                          ))}
-                          <LabelList 
-                            position="center" 
-                            fill="#fff" 
-                            stroke="none" 
-                            dataKey="name" 
-                            style={{ fontSize: '11px', fontWeight: 'bold' }}
-                          />
-                        </Funnel>
-                      </FunnelChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-
-              {/* Metrics Sidebar */}
-              <div className="lg:w-96 space-y-6">
-                <h2 className="text-white font-bold mb-6 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-blue-500" /> Inteligência de Dados
-                </h2>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Users className="w-3 h-3 text-zinc-500" />
-                      <span className="text-[9px] uppercase font-bold text-zinc-600">Motoristas</span>
-                    </div>
-                    <div className="text-xl font-black text-white">{uniqueDrivers}</div>
-                  </div>
-                  <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Truck className="w-3 h-3 text-zinc-500" />
-                      <span className="text-[9px] uppercase font-bold text-zinc-600">Viagens</span>
-                    </div>
-                    <div className="text-xl font-black text-white">{loadings.length}</div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/50">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Weight className="w-4 h-4 text-zinc-500" />
-                      <span className="text-[10px] uppercase font-bold text-zinc-600">Média por Caminhão</span>
-                    </div>
-                    <div className="text-2xl font-black text-white">{avgWeightPerDriver.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg</div>
-                    <div className="text-[10px] text-zinc-500 mt-1">Eficiência média de carregamento</div>
-                  </div>
-
-                  {topDriver && (
-                    <div className="bg-green-500/5 p-4 rounded-2xl border border-green-500/10">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="p-1.5 bg-green-500/20 rounded-lg">
-                          <UserIcon className="w-4 h-4 text-green-500" />
-                        </div>
-                        <span className="text-[10px] uppercase font-bold text-green-600">Melhor Desempenho</span>
-                      </div>
-                      <div className="text-lg font-black text-white truncate">{topDriver.name}</div>
-                      <div className="flex justify-between items-center mt-2 pt-2 border-t border-green-500/10">
-                        <div className="text-center">
-                          <div className="text-[9px] text-zinc-500 uppercase">Viagens</div>
-                          <div className="text-sm font-bold text-white">{topDriver.count}</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-[9px] text-zinc-500 uppercase">Total</div>
-                          <div className="text-sm font-bold text-green-500">{topDriver.weight.toLocaleString()} kg</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/50">
-                    <div className="flex items-center gap-3 mb-2">
-                      <BarChart2 className="w-4 h-4 text-zinc-500" />
-                      <span className="text-[10px] uppercase font-bold text-zinc-600">Taxa de Conclusão</span>
-                    </div>
-                    <div className="flex items-end gap-2">
-                      <div className="text-2xl font-black text-white">
-                        {totalPlannedWeight > 0 ? ((totalWeight / totalPlannedWeight) * 100).toFixed(1) : 0}%
-                      </div>
-                      <div className="text-[10px] text-zinc-500 mb-1.5">do planejado</div>
-                    </div>
-                    <div className="w-full h-1.5 bg-zinc-800 rounded-full mt-3 overflow-hidden">
-                      <div 
-                        className="h-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]" 
-                        style={{ width: `${totalPlannedWeight > 0 ? (totalWeight / totalPlannedWeight) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-zinc-800/50">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-[10px] uppercase font-bold text-zinc-600">Ranking de Motoristas</span>
-                      <span className="text-[9px] text-zinc-500">Top 5</span>
-                    </div>
-                    <div className="space-y-3">
-                      {driverStats.slice(0, 5).map((d, idx) => (
-                        <div key={idx} className="flex items-center gap-3">
-                          <div className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-500">
-                            {idx + 1}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[11px] font-bold text-zinc-300 truncate">{d.name}</div>
-                            <div className="w-full h-1 bg-zinc-800 rounded-full mt-1">
-                              <div 
-                                className="h-full bg-zinc-600" 
-                                style={{ width: `${(d.weight / topDriver.weight) * 100}%` }}
+                    {/* Driver Funnel */}
+                    <div className="mt-12">
+                      <h2 className="text-white font-bold mb-8 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-blue-500" /> Top 5 Motoristas (Funil de Volume)
+                      </h2>
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <FunnelChart>
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
+                              itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                              formatter={(value: number, name: string, props: any) => [
+                                `${value.toLocaleString()} kg`, 
+                                `${props.payload.name} (${props.payload.sub})`
+                              ]}
+                            />
+                            <Funnel
+                              data={driverFunnelData}
+                              dataKey="value"
+                            >
+                              {driverFunnelData.map((entry, index) => (
+                                <Cell key={`cell-driver-${index}`} fill={entry.fill} />
+                              ))}
+                              <LabelList 
+                                position="center" 
+                                fill="#fff" 
+                                stroke="none" 
+                                dataKey="name" 
+                                style={{ fontSize: '11px', fontWeight: 'bold' }}
                               />
+                            </Funnel>
+                          </FunnelChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Freight Funnel */}
+                    <div className="mt-12">
+                      <h2 className="text-white font-bold mb-8 flex items-center gap-2">
+                        <Package className="w-5 h-5 text-purple-500" /> Top 5 Fretes (Funil de Volume)
+                      </h2>
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <FunnelChart>
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
+                              itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                              formatter={(value: number, name: string, props: any) => [
+                                `${value.toLocaleString()} kg`, 
+                                `${props.payload.name} (${props.payload.sub})`
+                              ]}
+                            />
+                            <Funnel
+                              data={freightFunnelData}
+                              dataKey="value"
+                            >
+                              {freightFunnelData.map((entry, index) => (
+                                <Cell key={`cell-freight-${index}`} fill={entry.fill} />
+                              ))}
+                              <LabelList 
+                                position="center" 
+                                fill="#fff" 
+                                stroke="none" 
+                                dataKey="name" 
+                                style={{ fontSize: '11px', fontWeight: 'bold' }}
+                              />
+                            </Funnel>
+                          </FunnelChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metrics Sidebar */}
+                  <div className="lg:w-96 space-y-6">
+                    <h2 className="text-white font-bold mb-6 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-blue-500" /> Inteligência de Dados
+                    </h2>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/50">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Users className="w-3 h-3 text-zinc-500" />
+                          <span className="text-[9px] uppercase font-bold text-zinc-600">Motoristas</span>
+                        </div>
+                        <div className="text-xl font-black text-white">{uniqueDrivers}</div>
+                      </div>
+                      <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/50">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Truck className="w-3 h-3 text-zinc-500" />
+                          <span className="text-[9px] uppercase font-bold text-zinc-600">Viagens</span>
+                        </div>
+                        <div className="text-xl font-black text-white">{loadings.length}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/50">
+                        <div className="flex items-center gap-3 mb-2">
+                          <Weight className="w-4 h-4 text-zinc-500" />
+                          <span className="text-[10px] uppercase font-bold text-zinc-600">Média por Caminhão</span>
+                        </div>
+                        <div className="text-2xl font-black text-white">{avgWeightPerDriver.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg</div>
+                        <div className="text-[10px] text-zinc-500 mt-1">Eficiência média de carregamento</div>
+                      </div>
+
+                      {topDriver && (
+                        <div className="bg-green-500/5 p-4 rounded-2xl border border-green-500/10">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="p-1.5 bg-green-500/20 rounded-lg">
+                              <UserIcon className="w-4 h-4 text-green-500" />
+                            </div>
+                            <span className="text-[10px] uppercase font-bold text-green-600">Melhor Desempenho</span>
+                          </div>
+                          <div className="text-lg font-black text-white truncate">{topDriver.name}</div>
+                          <div className="flex justify-between items-center mt-2 pt-2 border-t border-green-500/10">
+                            <div className="text-center">
+                              <div className="text-[9px] text-zinc-500 uppercase">Viagens</div>
+                              <div className="text-sm font-bold text-white">{topDriver.count}</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-[9px] text-zinc-500 uppercase">Total</div>
+                              <div className="text-sm font-bold text-green-500">{topDriver.weight.toLocaleString()} kg</div>
                             </div>
                           </div>
-                          <div className="text-[10px] font-black text-white whitespace-nowrap">
-                            {d.weight.toLocaleString()} kg
-                          </div>
                         </div>
-                      ))}
+                      )}
+
+                      <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/50">
+                        <div className="flex items-center gap-3 mb-2">
+                          <BarChart2 className="w-4 h-4 text-zinc-500" />
+                          <span className="text-[10px] uppercase font-bold text-zinc-600">Taxa de Conclusão</span>
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <div className="text-2xl font-black text-white">
+                            {totalPlannedWeight > 0 ? ((totalWeight / totalPlannedWeight) * 100).toFixed(1) : 0}%
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mb-1.5">do planejado</div>
+                        </div>
+                        <div className="w-full h-1.5 bg-zinc-800 rounded-full mt-3 overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]" 
+                            style={{ width: `${totalPlannedWeight > 0 ? (totalWeight / totalPlannedWeight) * 100 : 0}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-zinc-800/50">
+                        <div className="flex justify-between items-center mb-4">
+                          <span className="text-[10px] uppercase font-bold text-zinc-600">Ranking de Motoristas</span>
+                          <span className="text-[9px] text-zinc-500">Top 5</span>
+                        </div>
+                        <div className="space-y-3">
+                          {driverStats.slice(0, 5).map((d, idx) => (
+                            <div key={idx} className="flex items-center gap-3">
+                              <div className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-500">
+                                {idx + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[11px] font-bold text-zinc-300 truncate">{d.name}</div>
+                                <div className="w-full h-1 bg-zinc-800 rounded-full mt-1">
+                                  <div 
+                                    className="h-full bg-zinc-600" 
+                                    style={{ width: `${(d.weight / (topDriver?.weight || 1)) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-[10px] font-black text-white whitespace-nowrap">
+                                {d.weight.toLocaleString()} kg
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {activeTab === 'freights' && (
+          <>
+            {/* Freight Registration */}
+            <section className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-8">
+              <h2 className="text-white font-bold mb-6 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-blue-500" /> Cadastrar Novo Frete
+              </h2>
+              <form onSubmit={handleSubmitFreight} className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Descrição</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Soja - Fazenda Sol"
+                    value={freightDesc}
+                    onChange={(e) => setFreightDesc(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Produto</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Soja"
+                    value={freightProduct}
+                    onChange={(e) => setFreightProduct(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Origem</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Sorriso-MT"
+                    value={freightOrigin}
+                    onChange={(e) => setFreightOrigin(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Destino</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Santos-SP"
+                    value={freightDestination}
+                    onChange={(e) => setFreightDestination(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Peso Total (kg)</label>
+                  <input 
+                    type="number" 
+                    placeholder="0"
+                    value={freightTotalWeight}
+                    onChange={(e) => setFreightTotalWeight(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div className="md:col-span-6 flex justify-end">
+                  <button 
+                    disabled={isSubmittingFreight}
+                    className="w-full md:w-auto px-12 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                  >
+                    {isSubmittingFreight ? 'Salvando...' : 'Criar Frete'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            {/* Freights List */}
+            <section className="space-y-4">
+              <h2 className="text-white font-bold flex items-center gap-2 px-2">
+                <TrendingUp className="w-5 h-5 text-blue-500" /> Fretes em Andamento
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {freights.map((f) => {
+                  const relatedLoadings = loadings.filter(l => l.freightId === f.id);
+                  const loadedWeight = relatedLoadings.reduce((acc, curr) => acc + curr.weight, 0);
+                  const progress = Math.min((loadedWeight / f.totalWeight) * 100, 100);
+
+                  return (
+                    <div key={f.id} className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-6 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-white font-bold">{f.description}</h3>
+                          <p className="text-xs text-zinc-500">{f.product} • {f.totalWeight.toLocaleString()} kg total</p>
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-600">
+                            <span className="bg-zinc-800 px-1.5 py-0.5 rounded">{f.origin}</span>
+                            <ChevronRight className="w-3 h-3" />
+                            <span className="bg-zinc-800 px-1.5 py-0.5 rounded">{f.destination}</span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setDeletingId(f.id);
+                            setDeletingType('freight');
+                          }}
+                          className="text-zinc-700 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
+                          <span className="text-zinc-600">Progresso</span>
+                          <span className="text-blue-400">{loadedWeight.toLocaleString()} / {f.totalWeight.toLocaleString()} kg</span>
+                        </div>
+                        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 transition-all duration-500" 
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-600">
+                        <Truck className="w-3 h-3" />
+                        <span>{relatedLoadings.length} caminhões carregados</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+            </section>
+          </>
+        )}
+
+        {activeTab === 'loadings' && (
+          <>
+            {/* Loading Registration */}
+            <section className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-8">
+              <h2 className="text-white font-bold mb-6 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-green-500" /> Novo Carregamento (Motorista)
+              </h2>
+              <form onSubmit={handleSubmitLoading} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Selecionar Frete</label>
+                  <select 
+                    value={selectedFreightId}
+                    onChange={(e) => setSelectedFreightId(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none"
+                  >
+                    <option value="">Selecione...</option>
+                    {freights.filter(f => f.status === 'Aberto').map(f => (
+                      <option key={f.id} value={f.id}>{f.description}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Motorista</label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
+                    <input 
+                      type="text" 
+                      placeholder="Nome"
+                      value={driverName}
+                      onChange={(e) => setDriverName(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Placa</label>
+                  <div className="relative">
+                    <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
+                    <input 
+                      type="text" 
+                      placeholder="ABC-1234"
+                      value={plate}
+                      onChange={(e) => setPlate(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-600 ml-1">Peso (kg)</label>
+                  <div className="relative">
+                    <Weight className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
+                    <input 
+                      type="number" 
+                      placeholder="0"
+                      value={weight}
+                      onChange={(e) => setWeight(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-end">
+                  <button 
+                    disabled={isSubmittingLoading}
+                    className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-black font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-900/20"
+                  >
+                    {isSubmittingLoading ? 'Salvando...' : 'Cadastrar'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            {/* List Section */}
+            <section className="space-y-4">
+              <h2 className="text-white font-bold flex items-center gap-2 px-2">
+                <LayoutDashboard className="w-5 h-5 text-green-500" /> Carregamentos Recentes
+              </h2>
+              <div className="grid grid-cols-1 gap-4">
+                {loadings.map((loading) => {
+                  const freight = freights.find(f => f.id === loading.freightId);
+                  return (
+                    <div key={loading.id} className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-zinc-700 transition-all">
+                      {editingId === loading.id ? (
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                          <input 
+                            type="text" 
+                            value={editDriverName}
+                            onChange={(e) => setEditDriverName(e.target.value)}
+                            className="bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none"
+                            placeholder="Motorista"
+                          />
+                          <input 
+                            type="text" 
+                            value={editPlate}
+                            onChange={(e) => setEditPlate(e.target.value)}
+                            className="bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none"
+                            placeholder="Placa"
+                          />
+                          <input 
+                            type="number" 
+                            value={editWeight}
+                            onChange={(e) => setEditWeight(e.target.value)}
+                            className="bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-4 text-sm text-white focus:ring-2 focus:ring-green-500/50 outline-none"
+                            placeholder="Peso"
+                          />
+                          <div className="md:col-span-3 flex justify-end gap-2">
+                            <button onClick={cancelEditing} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-white transition-colors">Cancelar</button>
+                            <button onClick={() => saveEdit(loading.id)} className="px-4 py-2 bg-green-600 text-black text-xs font-bold rounded-lg hover:bg-green-500 transition-colors">Salvar Alterações</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-6 w-full md:w-auto">
+                            <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center text-green-500">
+                              <Truck className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-white font-bold">{loading.driverName}</h3>
+                                {freight && (
+                                  <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20">
+                                    {freight.description}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
+                                <span className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-300 font-mono">{loading.plate}</span>
+                                <span>•</span>
+                                <span>{loading.weight.toLocaleString()} kg</span>
+                                <span>•</span>
+                                <span>{format(parseISO(loading.date), 'dd/MM HH:mm')}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                            <div className="flex items-center gap-2">
+                              <StatusButton 
+                                active={loading.manifestoDone} 
+                                label="Manifesto" 
+                                onClick={() => toggleStatus(loading.id, 'manifestoDone', loading.manifestoDone)}
+                              />
+                              <StatusButton 
+                                active={loading.unloaded} 
+                                label="Descarregado" 
+                                onClick={() => toggleStatus(loading.id, 'unloaded', loading.unloaded)}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button 
+                                onClick={() => startEditing(loading)}
+                                className="p-2 text-zinc-700 hover:text-blue-500 transition-colors"
+                                title="Editar"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setDeletingId(loading.id);
+                                  setDeletingType('loading');
+                                }}
+                                className="p-2 text-zinc-700 hover:text-red-500 transition-colors"
+                                title="Excluir"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+                {loadings.length === 0 && (
+                  <div className="text-center py-20 border-2 border-dashed border-zinc-900 rounded-3xl">
+                    <p className="text-zinc-600">Nenhum carregamento registrado.</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </>
+        )}
+
+        {activeTab === 'reports' && (
+          <section className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-8 space-y-6">
+            <h2 className="text-white font-bold flex items-center gap-2">
+              <Download className="w-5 h-5 text-green-500" /> Exportar Relatórios
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button 
+                onClick={() => exportToCSV(freights, 'relatorio_fretes')}
+                className="flex items-center justify-between p-6 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-blue-500/50 transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500">
+                    <ClipboardList className="w-6 h-6" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-white font-bold">Relatório de Fretes</div>
+                    <div className="text-xs text-zinc-500">Lista completa de fretes e progresso</div>
+                  </div>
+                </div>
+                <Download className="w-5 h-5 text-zinc-700 group-hover:text-blue-500 transition-colors" />
+              </button>
+
+              <button 
+                onClick={() => exportToCSV(loadings, 'relatorio_carregamentos')}
+                className="flex items-center justify-between p-6 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-green-500/50 transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-green-500/10 rounded-xl text-green-500">
+                    <Truck className="w-6 h-6" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-white font-bold">Relatório de Carregamentos</div>
+                    <div className="text-xs text-zinc-500">Histórico de viagens e motoristas</div>
+                  </div>
+                </div>
+                <Download className="w-5 h-5 text-zinc-700 group-hover:text-green-500 transition-colors" />
+              </button>
             </div>
           </section>
         )}
+
+        {/* Performance Dashboard removed from here and moved to dashboard tab */}
       </main>
 
       {/* Modal de Confirmação de Exclusão */}
