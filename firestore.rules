@@ -37,17 +37,17 @@ service cloud.firestore {
     }
 
     match /freights/{id} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidFreight(request.resource.data);
-      allow update: if isAuthenticated() && isValidFreight(request.resource.data);
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow create: if isValidFreight(request.resource.data);
+      allow update: if isValidFreight(request.resource.data);
+      allow delete: if true;
     }
 
     match /loadings/{id} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidLoading(request.resource.data, true);
-      allow update: if isAuthenticated() && isValidLoading(request.resource.data, false);
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow create: if isValidLoading(request.resource.data, true);
+      allow update: if isValidLoading(request.resource.data, false);
+      allow delete: if true;
     }
     
     match /users/{userId} {
