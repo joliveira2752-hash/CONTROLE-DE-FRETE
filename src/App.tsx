@@ -45,7 +45,8 @@ import {
   ArrowRight,
   Download,
   Moon,
-  Sun
+  Sun,
+  Eye
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { 
@@ -125,6 +126,7 @@ function MainApp() {
   const [freightOrigin, setFreightOrigin] = useState('');
   const [freightDestination, setFreightDestination] = useState('');
   const [freightTotalWeight, setFreightTotalWeight] = useState('');
+  const [freightObservations, setFreightObservations] = useState('');
   const [isSubmittingFreight, setIsSubmittingFreight] = useState(false);
 
   // Loading Form State
@@ -132,16 +134,27 @@ function MainApp() {
   const [driverName, setDriverName] = useState('');
   const [plate, setPlate] = useState('');
   const [weight, setWeight] = useState('');
+  const [loadingObservations, setLoadingObservations] = useState('');
   const [isSubmittingLoading, setIsSubmittingLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingType, setDeletingType] = useState<'loading' | 'freight' | null>(null);
+  const [viewingFreightId, setViewingFreightId] = useState<string | null>(null);
   
   // Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDriverName, setEditDriverName] = useState('');
   const [editPlate, setEditPlate] = useState('');
   const [editWeight, setEditWeight] = useState('');
+  const [editObservations, setEditObservations] = useState('');
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+
+  // Filter States
+  const [freightFilterStatus, setFreightFilterStatus] = useState<'Todos' | 'Aberto' | 'Finalizado'>('Todos');
+  const [freightFilterDate, setFreightFilterDate] = useState('');
+  
+  const [loadingFilterDriver, setLoadingFilterDriver] = useState('');
+  const [loadingFilterDate, setLoadingFilterDate] = useState('');
+  const [loadingFilterStatus, setLoadingFilterStatus] = useState<'Todos' | 'Manifesto' | 'Descarregado' | 'Pendente'>('Todos');
 
   useEffect(() => {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
@@ -203,13 +216,15 @@ function MainApp() {
         destination: freightDestination,
         totalWeight: Number(freightTotalWeight),
         status: 'Aberto',
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        observations: freightObservations
       });
       setFreightDesc('');
       setFreightProduct('');
       setFreightOrigin('');
       setFreightDestination('');
       setFreightTotalWeight('');
+      setFreightObservations('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
@@ -231,11 +246,13 @@ function MainApp() {
         weight: Number(weight),
         manifestoDone: false,
         unloaded: false,
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        observations: loadingObservations
       });
       setDriverName('');
       setPlate('');
       setWeight('');
+      setLoadingObservations('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
@@ -281,6 +298,7 @@ function MainApp() {
     setEditDriverName(loading.driverName);
     setEditPlate(loading.plate);
     setEditWeight(loading.weight.toString());
+    setEditObservations(loading.observations || '');
   };
 
   const cancelEditing = () => {
@@ -293,7 +311,8 @@ function MainApp() {
       await updateDoc(doc(db, 'loadings', id), {
         driverName: editDriverName,
         plate: editPlate.toUpperCase(),
-        weight: Number(editWeight)
+        weight: Number(editWeight),
+        observations: editObservations
       });
       setEditingId(null);
     } catch (error) {
@@ -394,6 +413,23 @@ function MainApp() {
     fill: idx === 0 ? '#3b82f6' : idx === 1 ? '#2563eb' : idx === 2 ? '#1d4ed8' : idx === 3 ? '#1e40af' : '#1e3a8a',
     sub: `${(f.weight / totalWeight * 100).toFixed(1)}% do total`
   }));
+
+  const filteredFreights = freights.filter(f => {
+    const matchesStatus = freightFilterStatus === 'Todos' || f.status === freightFilterStatus;
+    const matchesDate = !freightFilterDate || f.date.startsWith(freightFilterDate);
+    return matchesStatus && matchesDate;
+  });
+
+  const filteredLoadings = loadings.filter(l => {
+    const matchesDriver = !loadingFilterDriver || l.driverName.toLowerCase().includes(loadingFilterDriver.toLowerCase());
+    const matchesDate = !loadingFilterDate || l.date.startsWith(loadingFilterDate);
+    let matchesStatus = true;
+    if (loadingFilterStatus === 'Manifesto') matchesStatus = l.manifestoDone;
+    else if (loadingFilterStatus === 'Descarregado') matchesStatus = l.unloaded;
+    else if (loadingFilterStatus === 'Pendente') matchesStatus = !l.manifestoDone || !l.unloaded;
+    
+    return matchesDriver && matchesDate && matchesStatus;
+  });
 
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-zinc-950 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} font-sans flex flex-col md:flex-row transition-colors duration-300`}>
@@ -743,6 +779,16 @@ function MainApp() {
                     className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
                   />
                 </div>
+                <div className="md:col-span-6 space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
+                  <textarea 
+                    placeholder="Notas adicionais sobre o frete..."
+                    value={freightObservations}
+                    onChange={(e) => setFreightObservations(e.target.value)}
+                    rows={2}
+                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none`}
+                  />
+                </div>
                 <div className="md:col-span-6 flex justify-end">
                   <button 
                     disabled={isSubmittingFreight}
@@ -756,20 +802,48 @@ function MainApp() {
 
             {/* Freights List */}
             <section className="space-y-4">
-              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2 px-2`}>
-                <TrendingUp className="w-5 h-5 text-blue-500" /> Fretes em Andamento
-              </h2>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
+                  <TrendingUp className="w-5 h-5 text-blue-500" /> Fretes em Andamento
+                </h2>
+                
+                <div className="flex items-center gap-3">
+                  <select 
+                    value={freightFilterStatus}
+                    onChange={(e) => setFreightFilterStatus(e.target.value as any)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                  >
+                    <option value="Todos">Todos Status</option>
+                    <option value="Aberto">Aberto</option>
+                    <option value="Finalizado">Finalizado</option>
+                  </select>
+                  <input 
+                    type="date"
+                    value={freightFilterDate}
+                    onChange={(e) => setFreightFilterDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                  />
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {freights.map((f) => {
+                {filteredFreights.map((f) => {
                   const relatedLoadings = loadings.filter(l => l.freightId === f.id);
                   const loadedWeight = relatedLoadings.reduce((acc, curr) => acc + curr.weight, 0);
                   const progress = Math.min((loadedWeight / f.totalWeight) * 100, 100);
 
                   return (
-                    <div key={f.id} className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-6 space-y-4 shadow-sm transition-colors`}>
+                    <div 
+                      key={f.id} 
+                      onClick={() => setViewingFreightId(f.id)}
+                      className={`${darkMode ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-700' : 'bg-white border-zinc-200 hover:border-zinc-300'} border rounded-3xl p-6 space-y-4 shadow-sm transition-all cursor-pointer group`}
+                    >
                       <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>{f.description}</h3>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>{f.description}</h3>
+                            <Eye className={`w-3 h-3 ${darkMode ? 'text-zinc-700 group-hover:text-blue-500' : 'text-zinc-300 group-hover:text-blue-500'} transition-colors`} />
+                          </div>
                           <p className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>{f.product} • {f.totalWeight.toLocaleString()} kg total</p>
                           <div className={`flex items-center gap-2 mt-1 text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
                             <span className={`${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'} px-1.5 py-0.5 rounded`}>{f.origin}</span>
@@ -778,11 +852,12 @@ function MainApp() {
                           </div>
                         </div>
                         <button 
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setDeletingId(f.id);
                             setDeletingType('freight');
                           }}
-                          className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors`}
+                          className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors p-1`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -801,13 +876,26 @@ function MainApp() {
                         </div>
                       </div>
 
-                      <div className={`flex items-center gap-2 text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                        <Truck className="w-3 h-3" />
-                        <span>{relatedLoadings.length} motoristas vinculados</span>
+                      <div className={`flex items-center justify-between text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        <div className="flex items-center gap-2">
+                          <Truck className="w-3 h-3" />
+                          <span>{relatedLoadings.length} motoristas vinculados</span>
+                        </div>
+                        {f.observations && (
+                          <div className="flex items-center gap-1 text-blue-500">
+                            <FileText className="w-3 h-3" />
+                            <span>Obs</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
+                {filteredFreights.length === 0 && (
+                  <div className={`text-center py-20 border-2 border-dashed ${darkMode ? 'border-zinc-800' : 'border-zinc-100'} rounded-3xl col-span-full`}>
+                    <p className={`${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Nenhum frete encontrado com os filtros atuais.</p>
+                  </div>
+                )}
               </div>
             </section>
           </>
@@ -873,6 +961,16 @@ function MainApp() {
                     />
                   </div>
                 </div>
+                <div className="md:col-span-2 space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
+                  <textarea 
+                    placeholder="Notas sobre o motorista ou carregamento..."
+                    value={loadingObservations}
+                    onChange={(e) => setLoadingObservations(e.target.value)}
+                    rows={1}
+                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all resize-none`}
+                  />
+                </div>
                 <div className="flex items-end">
                   <button 
                     disabled={isSubmittingLoading}
@@ -886,11 +984,40 @@ function MainApp() {
 
             {/* List Section */}
             <section className="space-y-4">
-              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2 px-2`}>
-                <LayoutDashboard className="w-5 h-5 text-green-500" /> Motoristas Cadastrados
-              </h2>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
+                  <LayoutDashboard className="w-5 h-5 text-green-500" /> Motoristas Cadastrados
+                </h2>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  <input 
+                    type="text"
+                    placeholder="Filtrar motorista..."
+                    value={loadingFilterDriver}
+                    onChange={(e) => setLoadingFilterDriver(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50 w-full md:w-40`}
+                  />
+                  <select 
+                    value={loadingFilterStatus}
+                    onChange={(e) => setLoadingFilterStatus(e.target.value as any)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  >
+                    <option value="Todos">Todos Status</option>
+                    <option value="Manifesto">Manifesto Pronto</option>
+                    <option value="Descarregado">Descarregado</option>
+                    <option value="Pendente">Pendente</option>
+                  </select>
+                  <input 
+                    type="date"
+                    value={loadingFilterDate}
+                    onChange={(e) => setLoadingFilterDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  />
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 gap-4">
-                {loadings.map((loading) => {
+                {filteredLoadings.map((loading) => {
                   const freight = freights.find(f => f.id === loading.freightId);
                   return (
                     <div key={loading.id} className={`${darkMode ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-700' : 'bg-white border-zinc-200 hover:border-zinc-300'} border rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 group transition-all shadow-sm`}>
@@ -916,6 +1043,13 @@ function MainApp() {
                             onChange={(e) => setEditWeight(e.target.value)}
                             className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
                             placeholder="Peso"
+                          />
+                          <textarea 
+                            value={editObservations}
+                            onChange={(e) => setEditObservations(e.target.value)}
+                            className={`w-full md:col-span-3 ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none resize-none`}
+                            placeholder="Observações..."
+                            rows={2}
                           />
                           <div className="md:col-span-3 flex justify-end gap-2">
                             <button onClick={cancelEditing} className={`px-4 py-2 text-xs font-bold ${darkMode ? 'text-zinc-500 hover:text-white' : 'text-zinc-400 hover:text-zinc-900'} transition-colors`}>Cancelar</button>
@@ -944,6 +1078,11 @@ function MainApp() {
                                 <span>•</span>
                                 <span>{format(parseISO(loading.date), 'dd/MM HH:mm')}</span>
                               </div>
+                              {loading.observations && (
+                                <p className={`text-[10px] italic mt-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} max-w-md truncate`}>
+                                  "{loading.observations}"
+                                </p>
+                              )}
                             </div>
                           </div>
 
@@ -987,9 +1126,9 @@ function MainApp() {
                     </div>
                   );
                 })}
-                {loadings.length === 0 && (
+                {filteredLoadings.length === 0 && (
                   <div className={`text-center py-20 border-2 border-dashed ${darkMode ? 'border-zinc-800' : 'border-zinc-100'} rounded-3xl`}>
-                    <p className={`${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Nenhum motorista cadastrado.</p>
+                    <p className={`${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Nenhum motorista encontrado com os filtros atuais.</p>
                   </div>
                 )}
               </div>
@@ -1040,6 +1179,117 @@ function MainApp() {
 
         {/* Performance Dashboard removed from here and moved to dashboard tab */}
       </main>
+
+        {/* Modal de Detalhes do Frete */}
+        {viewingFreightId && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
+            <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-8 rounded-3xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col space-y-6 shadow-2xl transition-colors`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 text-blue-500">
+                  <div className="p-3 bg-blue-500/10 rounded-2xl">
+                    <ClipboardList size={24} />
+                  </div>
+                  <div>
+                    <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>Detalhes do Frete</h3>
+                    <p className={`text-sm ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                      {freights.find(f => f.id === viewingFreightId)?.description}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setViewingFreightId(null)}
+                  className={`p-2 rounded-xl ${darkMode ? 'hover:bg-zinc-800 text-zinc-500' : 'hover:bg-zinc-100 text-zinc-400'} transition-colors`}
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 space-y-6 custom-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Produto</span>
+                    <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-medium`}>
+                      {freights.find(f => f.id === viewingFreightId)?.product}
+                    </div>
+                  </div>
+                  <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Origem / Destino</span>
+                    <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-medium`}>
+                      {freights.find(f => f.id === viewingFreightId)?.origin} → {freights.find(f => f.id === viewingFreightId)?.destination}
+                    </div>
+                  </div>
+                  <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Peso Total</span>
+                    <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-medium`}>
+                      {freights.find(f => f.id === viewingFreightId)?.totalWeight.toLocaleString()} kg
+                    </div>
+                  </div>
+                </div>
+
+                {freights.find(f => f.id === viewingFreightId)?.observations && (
+                  <div className={`${darkMode ? 'bg-blue-500/5 border-blue-500/10' : 'bg-blue-50 border-blue-100'} border p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-blue-400' : 'text-blue-600'} block mb-1`}>Observações do Frete</span>
+                    <p className={`text-sm ${darkMode ? 'text-zinc-300' : 'text-zinc-700'} whitespace-pre-wrap`}>
+                      {freights.find(f => f.id === viewingFreightId)?.observations}
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <h4 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
+                    <Truck className="w-4 h-4 text-green-500" /> Motoristas Vinculados
+                  </h4>
+                  
+                  <div className="space-y-3">
+                    {loadings.filter(l => l.freightId === viewingFreightId).length > 0 ? (
+                      loadings.filter(l => l.freightId === viewingFreightId).map(loading => (
+                        <div key={loading.id} className={`${darkMode ? 'bg-zinc-800/30 border-zinc-800' : 'bg-white border-zinc-100'} border rounded-2xl p-4 flex items-center justify-between`}>
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 ${darkMode ? 'bg-zinc-800' : 'bg-zinc-50'} rounded-xl flex items-center justify-center text-green-500`}>
+                              <UserIcon className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold text-sm`}>{loading.driverName}</div>
+                              <div className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} font-mono`}>
+                                {loading.plate} • {loading.weight.toLocaleString()} kg • {format(parseISO(loading.date), 'dd/MM HH:mm')}
+                              </div>
+                              {loading.observations && (
+                                <p className={`text-[10px] italic mt-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                  Obs: {loading.observations}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${loading.manifestoDone ? 'bg-green-500/10 text-green-500' : 'bg-zinc-500/10 text-zinc-500'}`}>
+                              Manifesto
+                            </div>
+                            <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${loading.unloaded ? 'bg-green-500/10 text-green-500' : 'bg-zinc-500/10 text-zinc-500'}`}>
+                              Descarregado
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className={`text-center py-8 border-2 border-dashed ${darkMode ? 'border-zinc-800' : 'border-zinc-100'} rounded-2xl`}>
+                        <p className={`text-sm ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Nenhum motorista vinculado a este frete.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-zinc-800/50">
+                <button
+                  onClick={() => setViewingFreightId(null)}
+                  className={`w-full px-6 py-3 ${darkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'} font-bold rounded-2xl transition-all`}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Modal de Confirmação de Exclusão */}
       {deletingId && (

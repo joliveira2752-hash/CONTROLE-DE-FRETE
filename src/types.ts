@@ -7,6 +7,7 @@ export interface Freight {
   totalWeight: number;
   status: 'Aberto' | 'Finalizado';
   date: string;
+  observations?: string;
 }
 
 export interface Loading {
@@ -18,4 +19,5 @@ export interface Loading {
   manifestoDone: boolean;
   unloaded: boolean;
   date: string;
+  observations?: string;
 }
