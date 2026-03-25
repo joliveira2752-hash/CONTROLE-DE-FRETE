@@ -32,5 +32,6 @@ export interface Loading {
   observations?: string;
   orderGiverId?: string;
   orderGiverName?: string;
+  driverUnitPrice?: number;
   driverValue?: number;
 }

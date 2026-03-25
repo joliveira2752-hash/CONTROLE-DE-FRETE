@@ -145,6 +145,7 @@ function MainApp() {
   const [plate, setPlate] = useState('');
   const [weight, setWeight] = useState('');
   const [orderGiverId, setOrderGiverId] = useState('');
+  const [driverUnitPrice, setDriverUnitPrice] = useState('');
   const [driverValue, setDriverValue] = useState('');
   const [loadingObservations, setLoadingObservations] = useState('');
   const [isSubmittingLoading, setIsSubmittingLoading] = useState(false);
@@ -159,6 +160,7 @@ function MainApp() {
   const [editWeight, setEditWeight] = useState('');
   const [editObservations, setEditObservations] = useState('');
   const [editOrderGiverId, setEditOrderGiverId] = useState('');
+  const [editDriverUnitPrice, setEditDriverUnitPrice] = useState('');
   const [editDriverValue, setEditDriverValue] = useState('');
   
   // Freight Edit State
@@ -181,22 +183,40 @@ function MainApp() {
 
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   
-  // Auto-calculate driver value based on weight and freight unit price
+  // Update unit price when freight changes
   useEffect(() => {
-    if (selectedFreightId && weight) {
+    if (selectedFreightId) {
       const freight = freights.find(f => f.id === selectedFreightId);
-      if (freight && freight.valorPagoMotorista) {
-        const calculatedValue = (Number(weight) / 1000) * freight.valorPagoMotorista;
-        setDriverValue(calculatedValue.toFixed(2));
+      if (freight) {
+        setDriverUnitPrice(freight.valorPagoMotorista?.toString() || '0');
       }
     }
-  }, [selectedFreightId, weight, freights]);
+  }, [selectedFreightId, freights]);
+
+  // Recalculate total value when weight or unit price changes
+  useEffect(() => {
+    if (weight && driverUnitPrice) {
+      const calculatedValue = (Number(weight) / 1000) * Number(driverUnitPrice);
+      setDriverValue(calculatedValue.toFixed(2));
+    } else if (!weight) {
+      setDriverValue('');
+    }
+  }, [weight, driverUnitPrice]);
+
+  // Recalculate edit total value
+  useEffect(() => {
+    if (editWeight && editDriverUnitPrice) {
+      const calculatedValue = (Number(editWeight) / 1000) * Number(editDriverUnitPrice);
+      setEditDriverValue(calculatedValue.toFixed(2));
+    }
+  }, [editWeight, editDriverUnitPrice]);
 
   // Filter States
   const [freightFilterStatus, setFreightFilterStatus] = useState<'Todos' | 'Aberto' | 'Finalizado'>('Todos');
   const [freightFilterDate, setFreightFilterDate] = useState('');
   
   const [loadingFilterDriver, setLoadingFilterDriver] = useState('');
+  const [loadingFilterPlate, setLoadingFilterPlate] = useState('');
   const [loadingFilterDate, setLoadingFilterDate] = useState('');
   const [loadingFilterStatus, setLoadingFilterStatus] = useState<'Todos' | 'Manifesto' | 'Descarregado' | 'Pendente'>('Todos');
 
@@ -335,6 +355,7 @@ function MainApp() {
         observations: loadingObservations,
         orderGiverId: orderGiverId || null,
         orderGiverName: orderGiver?.name || null,
+        driverUnitPrice: Number(driverUnitPrice) || 0,
         driverValue: Number(driverValue) || 0
       });
       setDriverName('');
@@ -342,6 +363,7 @@ function MainApp() {
       setWeight('');
       setLoadingObservations('');
       setOrderGiverId('');
+      setDriverUnitPrice('');
       setDriverValue('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
@@ -390,6 +412,7 @@ function MainApp() {
     setEditWeight(loading.weight.toString());
     setEditObservations(loading.observations || '');
     setEditOrderGiverId(loading.orderGiverId || '');
+    setEditDriverUnitPrice(loading.driverUnitPrice?.toString() || '');
     setEditDriverValue(loading.driverValue?.toString() || '');
   };
 
@@ -408,6 +431,7 @@ function MainApp() {
         observations: editObservations,
         orderGiverId: editOrderGiverId || null,
         orderGiverName: orderGiver?.name || null,
+        driverUnitPrice: Number(editDriverUnitPrice) || 0,
         driverValue: Number(editDriverValue) || 0
       });
       setEditingId(null);
@@ -498,8 +522,8 @@ function MainApp() {
     const tableData = freights.map(f => {
       const freightLoadings = loadings.filter(l => l.freightId === f.id);
       const totalLoadedWeight = freightLoadings.reduce((acc, curr) => acc + curr.weight, 0);
-      const revenue = (totalLoadedWeight / 1000) * (f.valorFrete || 0);
-      const payout = (totalLoadedWeight / 1000) * (f.valorPagoMotorista || 0);
+      const revenue = freightLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (f.valorFrete || 0)), 0);
+      const payout = freightLoadings.reduce((acc, curr) => acc + (curr.driverValue || (curr.weight / 1000) * (f.valorPagoMotorista || 0)), 0);
       const profit = revenue - payout;
       
       return [
@@ -530,7 +554,7 @@ function MainApp() {
     const tableData = loadings.map(l => {
       const freight = freights.find(f => f.id === l.freightId);
       const revenue = (l.weight / 1000) * (freight?.valorFrete || 0);
-      const payout = (l.weight / 1000) * (freight?.valorPagoMotorista || 0);
+      const payout = l.driverValue || (l.weight / 1000) * (freight?.valorPagoMotorista || 0);
       const profit = revenue - payout;
 
       return [
@@ -591,6 +615,7 @@ function MainApp() {
   }, 0);
 
   const totalDriverPayout = loadings.reduce((acc, curr) => {
+    if (curr.driverValue !== undefined) return acc + curr.driverValue;
     const freight = freights.find(f => f.id === curr.freightId);
     const unitPrice = freight?.valorPagoMotorista || 0;
     return acc + ((curr.weight / 1000) * unitPrice);
@@ -657,13 +682,14 @@ function MainApp() {
 
   const filteredLoadings = loadings.filter(l => {
     const matchesDriver = !loadingFilterDriver || l.driverName.toLowerCase().includes(loadingFilterDriver.toLowerCase());
+    const matchesPlate = !loadingFilterPlate || l.plate.toLowerCase().includes(loadingFilterPlate.toLowerCase());
     const matchesDate = !loadingFilterDate || l.date.startsWith(loadingFilterDate);
     let matchesStatus = true;
     if (loadingFilterStatus === 'Manifesto') matchesStatus = l.manifestoDone;
     else if (loadingFilterStatus === 'Descarregado') matchesStatus = l.unloaded;
     else if (loadingFilterStatus === 'Pendente') matchesStatus = !l.manifestoDone || !l.unloaded;
     
-    return matchesDriver && matchesDate && matchesStatus;
+    return matchesDriver && matchesPlate && matchesDate && matchesStatus;
   });
 
   return (
@@ -1426,7 +1452,21 @@ function MainApp() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor (R$)</label>
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Vlr Unit. Motorista (R$/ton)</label>
+                  <div className="relative">
+                    <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      placeholder="0.00"
+                      value={driverUnitPrice}
+                      onChange={(e) => setDriverUnitPrice(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Total (R$)</label>
                   <div className="relative">
                     <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                     <input 
@@ -1467,12 +1507,35 @@ function MainApp() {
                 </h2>
                 
                 <div className="flex flex-wrap items-center gap-3">
+                  <div className={`px-3 py-1.5 rounded-xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} flex items-center gap-2 shadow-sm`}>
+                    <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Total Pago:</span>
+                    <span className="text-xs font-black text-orange-500">
+                      R$ {filteredLoadings.reduce((acc, curr) => {
+                        if (curr.driverValue !== undefined) return acc + curr.driverValue;
+                        const freight = freights.find(f => f.id === curr.freightId);
+                        return acc + ((curr.weight / 1000) * (freight?.valorPagoMotorista || 0));
+                      }, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className={`px-3 py-1.5 rounded-xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} flex items-center gap-2 shadow-sm`}>
+                    <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Peso Total:</span>
+                    <span className={`text-xs font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>
+                      {filteredLoadings.reduce((acc, curr) => acc + curr.weight, 0).toLocaleString()} kg
+                    </span>
+                  </div>
                   <input 
                     type="text"
                     placeholder="Filtrar motorista..."
                     value={loadingFilterDriver}
                     onChange={(e) => setLoadingFilterDriver(e.target.value)}
                     className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50 w-full md:w-40`}
+                  />
+                  <input 
+                    type="text"
+                    placeholder="Filtrar placa..."
+                    value={loadingFilterPlate}
+                    onChange={(e) => setLoadingFilterPlate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50 w-full md:w-32`}
                   />
                   <select 
                     value={loadingFilterStatus}
@@ -1533,10 +1596,18 @@ function MainApp() {
                           </select>
                           <input 
                             type="number" 
+                            step="0.01"
+                            value={editDriverUnitPrice}
+                            onChange={(e) => setEditDriverUnitPrice(e.target.value)}
+                            className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
+                            placeholder="Vlr Unit. (R$/ton)"
+                          />
+                          <input 
+                            type="number" 
                             value={editDriverValue}
                             onChange={(e) => setEditDriverValue(e.target.value)}
                             className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
-                            placeholder="Valor (R$)"
+                            placeholder="Valor Total (R$)"
                           />
                           <textarea 
                             value={editObservations}
@@ -1580,20 +1651,23 @@ function MainApp() {
                                 )}
                               </div>
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
-                                <div className="flex flex-col">
+                                <div className={`flex flex-col p-2 rounded-xl ${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} border ${darkMode ? 'border-zinc-700/50' : 'border-zinc-100'}`}>
                                   <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Receita Empresa</span>
                                   <span className="text-[10px] font-bold text-blue-500">
                                     R$ {((loading.weight / 1000) * (freight?.valorFrete || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </span>
                                 </div>
-                                <div className="flex flex-col">
-                                  <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Pago Motorista</span>
-                                  <span className="text-[10px] font-bold text-orange-500">
-                                    R$ {((loading.weight / 1000) * (freight?.valorPagoMotorista || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                <div className={`flex flex-col p-2 rounded-xl ${darkMode ? 'bg-orange-500/5' : 'bg-orange-50/50'} border ${darkMode ? 'border-orange-500/20' : 'border-orange-100'} shadow-sm shadow-orange-500/5`}>
+                                  <span className={`text-[8px] uppercase font-bold text-orange-600`}>Total Pago Motorista</span>
+                                  <span className="text-[11px] font-black text-orange-600">
+                                    R$ {loading.driverValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || ((loading.weight / 1000) * (freight?.valorPagoMotorista || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    <span className="text-[8px] ml-1 font-normal opacity-70">
+                                      (R$ {(loading.driverUnitPrice || freight?.valorPagoMotorista || 0).toFixed(2)}/t)
+                                    </span>
                                   </span>
                                 </div>
-                                <div className="flex flex-col">
-                                  <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Lucro Líquido</span>
+                                <div className={`flex flex-col p-2 rounded-xl ${darkMode ? 'bg-green-500/5' : 'bg-green-50/50'} border ${darkMode ? 'border-green-500/20' : 'border-green-100'}`}>
+                                  <span className={`text-[8px] uppercase font-bold text-green-600`}>Lucro Líquido</span>
                                   <span className="text-[10px] font-black text-green-600">
                                     R$ {((loading.weight / 1000) * ((freight?.valorFrete || 0) - (freight?.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </span>
