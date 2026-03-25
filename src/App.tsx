@@ -219,6 +219,9 @@ function MainApp() {
   const [loadingFilterPlate, setLoadingFilterPlate] = useState('');
   const [loadingFilterDate, setLoadingFilterDate] = useState('');
   const [loadingFilterStatus, setLoadingFilterStatus] = useState<'Todos' | 'Manifesto' | 'Descarregado' | 'Pendente'>('Todos');
+  const [billingFilterFreightId, setBillingFilterFreightId] = useState('');
+  const [billingFilterStartDate, setBillingFilterStartDate] = useState('');
+  const [billingFilterEndDate, setBillingFilterEndDate] = useState('');
 
   useEffect(() => {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
@@ -607,14 +610,21 @@ function MainApp() {
   const pendingManifesto = loadings.filter(l => !l.manifestoDone).length;
   const totalCompleted = loadings.filter(l => l.unloaded).length;
 
-  // Billing Metrics
-  const totalRevenue = loadings.reduce((acc, curr) => {
+  // Billing Metrics (Filtered for the Billing Dashboard)
+  const billingLoadings = loadings.filter(l => {
+    const matchesFreight = !billingFilterFreightId || l.freightId === billingFilterFreightId;
+    const matchesStartDate = !billingFilterStartDate || l.date >= billingFilterStartDate;
+    const matchesEndDate = !billingFilterEndDate || l.date <= billingFilterEndDate;
+    return matchesFreight && matchesStartDate && matchesEndDate;
+  });
+
+  const totalRevenue = billingLoadings.reduce((acc, curr) => {
     const freight = freights.find(f => f.id === curr.freightId);
     const unitPrice = freight?.valorFrete || 0;
     return acc + ((curr.weight / 1000) * unitPrice);
   }, 0);
 
-  const totalDriverPayout = loadings.reduce((acc, curr) => {
+  const totalDriverPayout = billingLoadings.reduce((acc, curr) => {
     if (curr.driverValue !== undefined) return acc + curr.driverValue;
     const freight = freights.find(f => f.id === curr.freightId);
     const unitPrice = freight?.valorPagoMotorista || 0;
@@ -730,16 +740,50 @@ function MainApp() {
       <main className="flex-1 p-6 md:p-10 space-y-10 overflow-y-auto">
         {activeTab === 'faturamento' && (
           <div className="space-y-10">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} text-2xl font-black flex items-center gap-3`}>
                 <DollarSign className="w-8 h-8 text-green-500" /> Dashboard de Faturamento
               </h2>
-              <button 
-                onClick={exportBillingToPDF}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-500 transition-all shadow-lg shadow-green-900/20"
-              >
-                <Download className="w-4 h-4" /> Exportar PDF
-              </button>
+              
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Filtrar por Pedido (Frete)</label>
+                  <select 
+                    value={billingFilterFreightId}
+                    onChange={(e) => setBillingFilterFreightId(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50 w-full md:w-64`}
+                  >
+                    <option value="">Todos os Pedidos</option>
+                    {freights.map(f => (
+                      <option key={f.id} value={f.id}>{f.description} - {f.product}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Início</label>
+                  <input 
+                    type="date"
+                    value={billingFilterStartDate}
+                    onChange={(e) => setBillingFilterStartDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Fim</label>
+                  <input 
+                    type="date"
+                    value={billingFilterEndDate}
+                    onChange={(e) => setBillingFilterEndDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  />
+                </div>
+                <button 
+                  onClick={exportBillingToPDF}
+                  className="mt-auto flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-500 transition-all shadow-lg shadow-green-900/20 h-[38px]"
+                >
+                  <Download className="w-4 h-4" /> Exportar PDF
+                </button>
+              </div>
             </div>
 
             <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -794,7 +838,7 @@ function MainApp() {
               </div>
 
               <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
-                <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6`}>Top 5 Fretes por Receita</h3>
+                <h3 className={`${darkMode ? 'text-white' : 'text-black'} font-black mb-6`}>Top 5 Fretes por Receita</h3>
                 <div className="space-y-4">
                   {freights
                     .sort((a, b) => {
@@ -815,11 +859,11 @@ function MainApp() {
                               #{idx + 1}
                             </div>
                             <div>
-                              <div className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{f.description}</div>
-                              <div className="text-[10px] text-zinc-500">{f.product}</div>
+                              <div className={`text-sm font-black ${darkMode ? 'text-white' : 'text-black'}`}>{f.description}</div>
+                              <div className={`text-[10px] font-bold ${darkMode ? 'text-zinc-400' : 'text-black'}`}>{f.product}</div>
                             </div>
                           </div>
-                          <div className="text-sm font-black text-green-600">
+                          <div className={`text-sm font-black ${darkMode ? 'text-green-500' : 'text-black'}`}>
                             R$ {rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </div>
                         </div>
@@ -828,6 +872,58 @@ function MainApp() {
                 </div>
               </div>
             </div>
+
+            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
+              <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
+                <ClipboardList className="w-5 h-5 text-orange-500" /> Resumo Financeiro por Pedido (Frete)
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500 border-zinc-800' : 'text-zinc-400 border-zinc-100'} border-b`}>
+                      <th className="pb-4">Pedido / Frete</th>
+                      <th className="pb-4">Peso Total</th>
+                      <th className="pb-4">Receita Total</th>
+                      <th className="pb-4">Pago Motoristas</th>
+                      <th className="pb-4">Lucro Líquido</th>
+                      <th className="pb-4">Margem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {freights
+                      .filter(f => !billingFilterFreightId || f.id === billingFilterFreightId)
+                      .map(f => {
+                        const fLoadings = billingLoadings.filter(l => l.freightId === f.id);
+                        const totalWeight = fLoadings.reduce((acc, curr) => acc + curr.weight, 0);
+                        const revenue = fLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (f.valorFrete || 0)), 0);
+                        const payout = fLoadings.reduce((acc, curr) => {
+                          if (curr.driverValue !== undefined) return acc + curr.driverValue;
+                          return acc + ((curr.weight / 1000) * (f.valorPagoMotorista || 0));
+                        }, 0);
+                        const profit = revenue - payout;
+                        const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+
+                        if (fLoadings.length === 0 && billingFilterStartDate && billingFilterEndDate) return null;
+                        if (fLoadings.length === 0 && (billingFilterStartDate || billingFilterEndDate)) return null;
+
+                        return (
+                          <tr key={f.id} className={`${darkMode ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'} transition-colors`}>
+                            <td className="py-4">
+                              <div className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{f.description}</div>
+                              <div className="text-[10px] text-zinc-500">{f.product} - {f.origin} para {f.destination}</div>
+                            </td>
+                            <td className={`py-4 text-sm ${darkMode ? 'text-zinc-300' : 'text-zinc-600'}`}>{totalWeight.toLocaleString()} kg</td>
+                            <td className="py-4 text-sm font-bold text-blue-500">R$ {revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className="py-4 text-sm font-bold text-orange-500">R$ {payout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className={`py-4 text-sm font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>R$ {profit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className={`py-4 text-sm font-black ${margin >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{margin.toFixed(1)}%</td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
             <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
               <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
@@ -846,7 +942,7 @@ function MainApp() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {loadings.sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()).map(l => {
+                    {billingLoadings.sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()).map(l => {
                       const freight = freights.find(f => f.id === l.freightId);
                       const rev = (l.weight / 1000) * (freight?.valorFrete || 0);
                       const pay = (l.weight / 1000) * (freight?.valorPagoMotorista || 0);
