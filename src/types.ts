@@ -8,9 +8,9 @@ export interface Freight {
   status: 'Aberto' | 'Finalizado';
   date: string;
   observations?: string;
-  valorFrete?: number;
-  valorRecebido?: number;
-  valorPagoMotorista?: number;
+  valorFrete?: number; // Preço unitário empresa (R$/kg)
+  valorRecebido?: number; // Total recebido (calculado ou fixo)
+  valorPagoMotorista?: number; // Preço unitário motorista (R$/kg)
 }
 
 export interface Employee {

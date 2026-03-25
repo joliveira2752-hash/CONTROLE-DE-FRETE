@@ -180,6 +180,17 @@ function MainApp() {
   const [isSubmittingEmployee, setIsSubmittingEmployee] = useState(false);
 
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+  
+  // Auto-calculate driver value based on weight and freight unit price
+  useEffect(() => {
+    if (selectedFreightId && weight) {
+      const freight = freights.find(f => f.id === selectedFreightId);
+      if (freight && freight.valorPagoMotorista) {
+        const calculatedValue = (Number(weight) / 1000) * freight.valorPagoMotorista;
+        setDriverValue(calculatedValue.toFixed(2));
+      }
+    }
+  }, [selectedFreightId, weight, freights]);
 
   // Filter States
   const [freightFilterStatus, setFreightFilterStatus] = useState<'Todos' | 'Aberto' | 'Finalizado'>('Todos');
@@ -482,46 +493,66 @@ function MainApp() {
 
   const exportFreightsToPDF = () => {
     const doc = new jsPDF();
-    doc.text('Relatório de Fretes', 14, 15);
+    doc.text('Relatório de Fretes Financeiro', 14, 15);
     
-    const tableData = freights.map(f => [
-      f.description,
-      f.product,
-      `${f.origin} -> ${f.destination}`,
-      `${f.totalWeight.toLocaleString()} kg`,
-      f.status,
-      `R$ ${f.valorRecebido?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`
-    ]);
-
-    autoTable(doc, {
-      head: [['Descrição', 'Produto', 'Rota', 'Peso', 'Status', 'Recebido']],
-      body: tableData,
-      startY: 20,
+    const tableData = freights.map(f => {
+      const freightLoadings = loadings.filter(l => l.freightId === f.id);
+      const totalLoadedWeight = freightLoadings.reduce((acc, curr) => acc + curr.weight, 0);
+      const revenue = (totalLoadedWeight / 1000) * (f.valorFrete || 0);
+      const payout = (totalLoadedWeight / 1000) * (f.valorPagoMotorista || 0);
+      const profit = revenue - payout;
+      
+      return [
+        f.description,
+        `${totalLoadedWeight.toLocaleString()} kg`,
+        `R$ ${revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        `R$ ${payout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        `R$ ${profit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        f.status
+      ];
     });
 
-    doc.save('relatorio_fretes.pdf');
+    autoTable(doc, {
+      head: [['Descrição', 'Peso Carregado', 'Vlr Empresa', 'Vlr Motorista', 'Lucro', 'Status']],
+      body: tableData,
+      startY: 20,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [59, 130, 246] }
+    });
+
+    doc.save('relatorio_fretes_financeiro.pdf');
   };
 
   const exportLoadingsToPDF = () => {
     const doc = new jsPDF();
-    doc.text('Relatório de Carregamentos', 14, 15);
+    doc.text('Relatório de Carregamentos Detalhado', 14, 15);
     
-    const tableData = loadings.map(l => [
-      l.driverName,
-      l.plate,
-      `${l.weight.toLocaleString()} kg`,
-      format(parseISO(l.date), 'dd/MM/yyyy'),
-      l.orderGiverName || '-',
-      `R$ ${l.driverValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`
-    ]);
+    const tableData = loadings.map(l => {
+      const freight = freights.find(f => f.id === l.freightId);
+      const revenue = (l.weight / 1000) * (freight?.valorFrete || 0);
+      const payout = (l.weight / 1000) * (freight?.valorPagoMotorista || 0);
+      const profit = revenue - payout;
 
-    autoTable(doc, {
-      head: [['Motorista', 'Placa', 'Peso', 'Data', 'Ordem', 'Valor Pago']],
-      body: tableData,
-      startY: 20,
+      return [
+        l.driverName,
+        l.plate,
+        `${l.weight.toLocaleString()} kg`,
+        `R$ ${revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        `R$ ${payout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        `R$ ${profit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        format(parseISO(l.date), 'dd/MM/yyyy')
+      ];
     });
 
-    doc.save('relatorio_carregamentos.pdf');
+    autoTable(doc, {
+      head: [['Motorista', 'Placa', 'Peso', 'Vlr Empresa', 'Vlr Motorista', 'Lucro', 'Data']],
+      body: tableData,
+      startY: 20,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [34, 197, 94] }
+    });
+
+    doc.save('relatorio_carregamentos_detalhado.pdf');
   };
 
   const exportBillingToPDF = () => {
@@ -553,8 +584,18 @@ function MainApp() {
   const totalCompleted = loadings.filter(l => l.unloaded).length;
 
   // Billing Metrics
-  const totalRevenue = freights.reduce((acc, curr) => acc + (curr.valorRecebido || 0), 0);
-  const totalDriverPayout = loadings.reduce((acc, curr) => acc + (curr.driverValue || 0), 0);
+  const totalRevenue = loadings.reduce((acc, curr) => {
+    const freight = freights.find(f => f.id === curr.freightId);
+    const unitPrice = freight?.valorFrete || 0;
+    return acc + ((curr.weight / 1000) * unitPrice);
+  }, 0);
+
+  const totalDriverPayout = loadings.reduce((acc, curr) => {
+    const freight = freights.find(f => f.id === curr.freightId);
+    const unitPrice = freight?.valorPagoMotorista || 0;
+    return acc + ((curr.weight / 1000) * unitPrice);
+  }, 0);
+
   const netProfit = totalRevenue - totalDriverPayout;
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
@@ -730,27 +771,78 @@ function MainApp() {
                 <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6`}>Top 5 Fretes por Receita</h3>
                 <div className="space-y-4">
                   {freights
-                    .sort((a, b) => (b.valorRecebido || 0) - (a.valorRecebido || 0))
+                    .sort((a, b) => {
+                      const aLoadings = loadings.filter(l => l.freightId === a.id);
+                      const bLoadings = loadings.filter(l => l.freightId === b.id);
+                      const aRev = aLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (a.valorFrete || 0)), 0);
+                      const bRev = bLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (b.valorFrete || 0)), 0);
+                      return bRev - aRev;
+                    })
                     .slice(0, 5)
-                    .map((f, idx) => (
-                      <div key={f.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs">
-                            #{idx + 1}
+                    .map((f, idx) => {
+                      const fLoadings = loadings.filter(l => l.freightId === f.id);
+                      const rev = fLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (f.valorFrete || 0)), 0);
+                      return (
+                        <div key={f.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs">
+                              #{idx + 1}
+                            </div>
+                            <div>
+                              <div className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{f.description}</div>
+                              <div className="text-[10px] text-zinc-500">{f.product}</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{f.description}</div>
-                            <div className="text-[10px] text-zinc-500">{f.product}</div>
+                          <div className="text-sm font-black text-green-600">
+                            R$ {rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </div>
                         </div>
-                        <div className="text-sm font-black text-green-600">
-                          R$ {(f.valorRecebido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                 </div>
               </div>
             </div>
+
+            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
+              <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
+                <Truck className="w-5 h-5 text-blue-500" /> Detalhamento por Motorista
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500 border-zinc-800' : 'text-zinc-400 border-zinc-100'} border-b`}>
+                      <th className="pb-4">Motorista</th>
+                      <th className="pb-4">Peso</th>
+                      <th className="pb-4">Receita (Empresa)</th>
+                      <th className="pb-4">Pago (Motorista)</th>
+                      <th className="pb-4">Lucro</th>
+                      <th className="pb-4">Data</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {loadings.sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()).map(l => {
+                      const freight = freights.find(f => f.id === l.freightId);
+                      const rev = (l.weight / 1000) * (freight?.valorFrete || 0);
+                      const pay = (l.weight / 1000) * (freight?.valorPagoMotorista || 0);
+                      const prof = rev - pay;
+                      return (
+                        <tr key={l.id} className={`text-sm ${darkMode ? 'text-zinc-300' : 'text-zinc-600'}`}>
+                          <td className="py-4">
+                            <div className="font-bold text-zinc-900 dark:text-white">{l.driverName}</div>
+                            <div className="text-[10px] text-zinc-500">{freight?.description}</div>
+                          </td>
+                          <td className="py-4 font-mono">{l.weight.toLocaleString()} kg</td>
+                          <td className="py-4 text-blue-500 font-bold">R$ {rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-4 text-orange-500 font-bold">R$ {pay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-4 text-green-600 font-black">R$ {prof.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-4 text-xs">{format(parseISO(l.date), 'dd/MM/yyyy')}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         )}
 
@@ -1077,9 +1169,10 @@ function MainApp() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor do Frete (R$)</label>
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Empresa (R$/ton)</label>
                   <input 
                     type="number" 
+                    step="0.01"
                     placeholder="0.00"
                     value={freightValorFrete}
                     onChange={(e) => setFreightValorFrete(e.target.value)}
@@ -1087,24 +1180,21 @@ function MainApp() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Recebido (R$)</label>
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Motorista (R$/ton)</label>
                   <input 
                     type="number" 
-                    placeholder="0.00"
-                    value={freightValorRecebido}
-                    onChange={(e) => setFreightValorRecebido(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Pago ao Motorista (R$)</label>
-                  <input 
-                    type="number" 
+                    step="0.01"
                     placeholder="0.00"
                     value={freightValorPagoMotorista}
                     onChange={(e) => setFreightValorPagoMotorista(e.target.value)}
                     className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Total Estimado (R$)</label>
+                  <div className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400'} border rounded-xl py-3 px-4 text-sm`}>
+                    R$ {((Number(freightTotalWeight) / 1000) * Number(freightValorFrete) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
                 </div>
                 <div className="md:col-span-6 space-y-2">
                   <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
@@ -1219,13 +1309,13 @@ function MainApp() {
                       <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
                         <div className="flex items-center gap-4">
                           <div>
-                            <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-0.5`}>Recebido</span>
-                            <div className="text-xs font-bold text-green-600">R$ {(f.valorRecebido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                            <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-0.5`}>Faturamento</span>
+                            <div className="text-xs font-bold text-green-600">R$ {((loadedWeight / 1000) * (f.valorFrete || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
                           </div>
                           <div>
                             <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-0.5`}>Lucro</span>
-                            <div className={`text-xs font-bold ${((f.valorRecebido || 0) - relatedLoadings.reduce((acc, curr) => acc + (curr.driverValue || 0), 0)) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
-                              R$ {((f.valorRecebido || 0) - relatedLoadings.reduce((acc, curr) => acc + (curr.driverValue || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            <div className={`text-xs font-bold ${((loadedWeight / 1000) * ((f.valorFrete || 0) - (f.valorPagoMotorista || 0))) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                              R$ {((loadedWeight / 1000) * ((f.valorFrete || 0) - (f.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </div>
                           </div>
                         </div>
@@ -1488,11 +1578,26 @@ function MainApp() {
                                     <UserIcon className="w-3 h-3" /> Ordem: {loading.orderGiverName}
                                   </span>
                                 )}
-                                {loading.driverValue !== undefined && (
-                                  <span className="flex items-center gap-1 font-bold text-green-600">
-                                    <DollarSign className="w-3 h-3" /> R$ {loading.driverValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+                                <div className="flex flex-col">
+                                  <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Receita Empresa</span>
+                                  <span className="text-[10px] font-bold text-blue-500">
+                                    R$ {((loading.weight / 1000) * (freight?.valorFrete || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </span>
-                                )}
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Pago Motorista</span>
+                                  <span className="text-[10px] font-bold text-orange-500">
+                                    R$ {((loading.weight / 1000) * (freight?.valorPagoMotorista || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Lucro Líquido</span>
+                                  <span className="text-[10px] font-black text-green-600">
+                                    R$ {((loading.weight / 1000) * ((freight?.valorFrete || 0) - (freight?.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
                               </div>
                               {loading.observations && (
                                 <p className={`text-[10px] italic mt-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} max-w-md truncate`}>
@@ -1751,27 +1856,27 @@ function MainApp() {
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
-                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Valor do Frete</span>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Unitário Empresa</span>
                     <div className="text-blue-600 font-bold">
-                      R$ {freights.find(f => f.id === viewingFreightId)?.valorFrete?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {freights.find(f => f.id === viewingFreightId)?.valorFrete?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} /ton
                     </div>
                   </div>
                   <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
-                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Valor Recebido</span>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Faturamento (Calc)</span>
                     <div className="text-green-600 font-bold">
-                      R$ {freights.find(f => f.id === viewingFreightId)?.valorRecebido?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {((loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + curr.weight, 0) / 1000) * (freights.find(f => f.id === viewingFreightId)?.valorFrete || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                   <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
-                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Pago ao Motorista</span>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Unitário Motorista</span>
                     <div className="text-orange-600 font-bold">
-                      R$ {freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} /ton
                     </div>
                   </div>
                   <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
                     <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Lucro Real</span>
-                    <div className={`font-bold ${((freights.find(f => f.id === viewingFreightId)?.valorRecebido || 0) - loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + (curr.driverValue || 0), 0)) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
-                      R$ {((freights.find(f => f.id === viewingFreightId)?.valorRecebido || 0) - loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + (curr.driverValue || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    <div className={`font-bold ${((loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + curr.weight, 0) / 1000) * ((freights.find(f => f.id === viewingFreightId)?.valorFrete || 0) - (freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista || 0))) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                      R$ {((loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + curr.weight, 0) / 1000) * ((freights.find(f => f.id === viewingFreightId)?.valorFrete || 0) - (freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                 </div>
@@ -1809,11 +1914,26 @@ function MainApp() {
                                       <UserIcon className="w-3 h-3" /> Ordem: {loading.orderGiverName}
                                     </span>
                                   )}
-                                  {loading.driverValue !== undefined && (
-                                    <span className="flex items-center gap-1 font-bold text-green-600">
-                                      <DollarSign className="w-3 h-3" /> R$ {loading.driverValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+                                  <div className="flex flex-col">
+                                    <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Receita</span>
+                                    <span className="text-[10px] font-bold text-blue-500">
+                                      R$ {((loading.weight / 1000) * (freights.find(f => f.id === viewingFreightId)?.valorFrete || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </span>
-                                  )}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Pago</span>
+                                    <span className="text-[10px] font-bold text-orange-500">
+                                      R$ {((loading.weight / 1000) * (freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Lucro</span>
+                                    <span className="text-[10px] font-black text-green-600">
+                                      R$ {((loading.weight / 1000) * ((freights.find(f => f.id === viewingFreightId)?.valorFrete || 0) - (freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
                                 </div>
                                 {loading.observations && (
                                   <p className={`text-[10px] italic mt-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
@@ -1934,31 +2054,30 @@ function MainApp() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor do Frete (R$)</label>
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Empresa (R$/ton)</label>
                     <input 
                       type="number" 
+                      step="0.01"
                       value={editFreightValorFrete}
                       onChange={(e) => setEditFreightValorFrete(e.target.value)}
                       className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Recebido (R$)</label>
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Motorista (R$/ton)</label>
                     <input 
                       type="number" 
-                      value={editFreightValorRecebido}
-                      onChange={(e) => setEditFreightValorRecebido(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Pago ao Motorista (R$)</label>
-                    <input 
-                      type="number" 
+                      step="0.01"
                       value={editFreightValorPagoMotorista}
                       onChange={(e) => setEditFreightValorPagoMotorista(e.target.value)}
                       className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Total Estimado (R$)</label>
+                    <div className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400'} border rounded-xl py-3 px-4 text-sm`}>
+                      R$ {((Number(editFreightTotalWeight) / 1000) * Number(editFreightValorFrete) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">
