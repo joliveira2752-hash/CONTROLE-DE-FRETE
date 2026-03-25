@@ -22,7 +22,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
-import { Loading, Freight } from './types';
+import { Loading, Freight, Employee } from './types';
 import { 
   Truck, 
   User as UserIcon, 
@@ -46,7 +46,8 @@ import {
   Download,
   Moon,
   Sun,
-  Eye
+  Eye,
+  DollarSign
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { 
@@ -59,8 +60,13 @@ import {
   Cell,
   Funnel,
   FunnelChart,
-  LabelList
+  LabelList,
+  PieChart,
+  Pie,
+  Legend
 } from 'recharts';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -118,7 +124,8 @@ function MainApp() {
   const [loading, setLoading] = useState(true);
   const [loadings, setLoadings] = useState<Loading[]>([]);
   const [freights, setFreights] = useState<Freight[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'freights' | 'loadings' | 'reports'>('dashboard');
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'freights' | 'loadings' | 'employees' | 'reports' | 'faturamento'>('dashboard');
   
   // Freight Form State
   const [freightDesc, setFreightDesc] = useState('');
@@ -126,6 +133,9 @@ function MainApp() {
   const [freightOrigin, setFreightOrigin] = useState('');
   const [freightDestination, setFreightDestination] = useState('');
   const [freightTotalWeight, setFreightTotalWeight] = useState('');
+  const [freightValorFrete, setFreightValorFrete] = useState('');
+  const [freightValorRecebido, setFreightValorRecebido] = useState('');
+  const [freightValorPagoMotorista, setFreightValorPagoMotorista] = useState('');
   const [freightObservations, setFreightObservations] = useState('');
   const [isSubmittingFreight, setIsSubmittingFreight] = useState(false);
 
@@ -134,6 +144,8 @@ function MainApp() {
   const [driverName, setDriverName] = useState('');
   const [plate, setPlate] = useState('');
   const [weight, setWeight] = useState('');
+  const [orderGiverId, setOrderGiverId] = useState('');
+  const [driverValue, setDriverValue] = useState('');
   const [loadingObservations, setLoadingObservations] = useState('');
   const [isSubmittingLoading, setIsSubmittingLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -146,6 +158,27 @@ function MainApp() {
   const [editPlate, setEditPlate] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editObservations, setEditObservations] = useState('');
+  const [editOrderGiverId, setEditOrderGiverId] = useState('');
+  const [editDriverValue, setEditDriverValue] = useState('');
+  
+  // Freight Edit State
+  const [editingFreightId, setEditingFreightId] = useState<string | null>(null);
+  const [editFreightDesc, setEditFreightDesc] = useState('');
+  const [editFreightProduct, setEditFreightProduct] = useState('');
+  const [editFreightOrigin, setEditFreightOrigin] = useState('');
+  const [editFreightDestination, setEditFreightDestination] = useState('');
+  const [editFreightTotalWeight, setEditFreightTotalWeight] = useState('');
+  const [editFreightValorFrete, setEditFreightValorFrete] = useState('');
+  const [editFreightValorRecebido, setEditFreightValorRecebido] = useState('');
+  const [editFreightValorPagoMotorista, setEditFreightValorPagoMotorista] = useState('');
+  const [editFreightObservations, setEditFreightObservations] = useState('');
+  const [editFreightStatus, setEditFreightStatus] = useState<'Aberto' | 'Finalizado'>('Aberto');
+
+  // Employee Form State
+  const [employeeName, setEmployeeName] = useState('');
+  const [employeeRole, setEmployeeRole] = useState('');
+  const [isSubmittingEmployee, setIsSubmittingEmployee] = useState(false);
+
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
 
   // Filter States
@@ -184,11 +217,45 @@ function MainApp() {
       handleFirestoreError(error, OperationType.LIST, 'freights');
     });
 
+    const unsubEmployees = onSnapshot(query(collection(db, 'employees'), orderBy('name', 'asc')), (snapshot) => {
+      setEmployees(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'employees');
+    });
+
     return () => {
       unsubLoadings();
       unsubFreights();
+      unsubEmployees();
     };
   }, []);
+
+  const handleSubmitEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!employeeName || !employeeRole) return;
+    setIsSubmittingEmployee(true);
+    try {
+      await addDoc(collection(db, 'employees'), {
+        name: employeeName,
+        role: employeeRole,
+        active: true
+      });
+      setEmployeeName('');
+      setEmployeeRole('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'employees');
+    } finally {
+      setIsSubmittingEmployee(false);
+    }
+  };
+
+  const deleteEmployee = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'employees', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `employees/${id}`);
+    }
+  };
 
   const handleLogin = async () => {
     // Login removed
@@ -215,6 +282,9 @@ function MainApp() {
         origin: freightOrigin,
         destination: freightDestination,
         totalWeight: Number(freightTotalWeight),
+        valorFrete: Number(freightValorFrete) || 0,
+        valorRecebido: Number(freightValorRecebido) || 0,
+        valorPagoMotorista: Number(freightValorPagoMotorista) || 0,
         status: 'Aberto',
         date: new Date().toISOString(),
         observations: freightObservations
@@ -224,6 +294,9 @@ function MainApp() {
       setFreightOrigin('');
       setFreightDestination('');
       setFreightTotalWeight('');
+      setFreightValorFrete('');
+      setFreightValorRecebido('');
+      setFreightValorPagoMotorista('');
       setFreightObservations('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
@@ -238,6 +311,7 @@ function MainApp() {
 
     setIsSubmittingLoading(true);
     const path = 'loadings';
+    const orderGiver = employees.find(emp => emp.id === orderGiverId);
     try {
       await addDoc(collection(db, path), {
         freightId: selectedFreightId,
@@ -247,12 +321,17 @@ function MainApp() {
         manifestoDone: false,
         unloaded: false,
         date: new Date().toISOString(),
-        observations: loadingObservations
+        observations: loadingObservations,
+        orderGiverId: orderGiverId || null,
+        orderGiverName: orderGiver?.name || null,
+        driverValue: Number(driverValue) || 0
       });
       setDriverName('');
       setPlate('');
       setWeight('');
       setLoadingObservations('');
+      setOrderGiverId('');
+      setDriverValue('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
@@ -299,6 +378,8 @@ function MainApp() {
     setEditPlate(loading.plate);
     setEditWeight(loading.weight.toString());
     setEditObservations(loading.observations || '');
+    setEditOrderGiverId(loading.orderGiverId || '');
+    setEditDriverValue(loading.driverValue?.toString() || '');
   };
 
   const cancelEditing = () => {
@@ -307,16 +388,59 @@ function MainApp() {
 
   const saveEdit = async (id: string) => {
     if (!editDriverName || !editPlate || !editWeight) return;
+    const orderGiver = employees.find(emp => emp.id === editOrderGiverId);
     try {
       await updateDoc(doc(db, 'loadings', id), {
         driverName: editDriverName,
         plate: editPlate.toUpperCase(),
         weight: Number(editWeight),
-        observations: editObservations
+        observations: editObservations,
+        orderGiverId: editOrderGiverId || null,
+        orderGiverName: orderGiver?.name || null,
+        driverValue: Number(editDriverValue) || 0
       });
       setEditingId(null);
     } catch (error) {
       console.error("Erro ao salvar edição:", error);
+    }
+  };
+
+  const startEditingFreight = (freight: Freight) => {
+    setEditingFreightId(freight.id);
+    setEditFreightDesc(freight.description);
+    setEditFreightProduct(freight.product);
+    setEditFreightOrigin(freight.origin);
+    setEditFreightDestination(freight.destination);
+    setEditFreightTotalWeight(freight.totalWeight.toString());
+    setEditFreightValorFrete(freight.valorFrete?.toString() || '');
+    setEditFreightValorRecebido(freight.valorRecebido?.toString() || '');
+    setEditFreightValorPagoMotorista(freight.valorPagoMotorista?.toString() || '');
+    setEditFreightObservations(freight.observations || '');
+    setEditFreightStatus(freight.status);
+  };
+
+  const cancelEditingFreight = () => {
+    setEditingFreightId(null);
+  };
+
+  const saveEditFreight = async (id: string) => {
+    if (!editFreightDesc || !editFreightProduct || !editFreightTotalWeight || !editFreightOrigin || !editFreightDestination) return;
+    try {
+      await updateDoc(doc(db, 'freights', id), {
+        description: editFreightDesc,
+        product: editFreightProduct,
+        origin: editFreightOrigin,
+        destination: editFreightDestination,
+        totalWeight: Number(editFreightTotalWeight),
+        valorFrete: Number(editFreightValorFrete) || 0,
+        valorRecebido: Number(editFreightValorRecebido) || 0,
+        valorPagoMotorista: Number(editFreightValorPagoMotorista) || 0,
+        observations: editFreightObservations,
+        status: editFreightStatus
+      });
+      setEditingFreightId(null);
+    } catch (error) {
+      console.error("Erro ao salvar edição do frete:", error);
     }
   };
 
@@ -356,6 +480,70 @@ function MainApp() {
     URL.revokeObjectURL(url);
   };
 
+  const exportFreightsToPDF = () => {
+    const doc = new jsPDF();
+    doc.text('Relatório de Fretes', 14, 15);
+    
+    const tableData = freights.map(f => [
+      f.description,
+      f.product,
+      `${f.origin} -> ${f.destination}`,
+      `${f.totalWeight.toLocaleString()} kg`,
+      f.status,
+      `R$ ${f.valorRecebido?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`
+    ]);
+
+    autoTable(doc, {
+      head: [['Descrição', 'Produto', 'Rota', 'Peso', 'Status', 'Recebido']],
+      body: tableData,
+      startY: 20,
+    });
+
+    doc.save('relatorio_fretes.pdf');
+  };
+
+  const exportLoadingsToPDF = () => {
+    const doc = new jsPDF();
+    doc.text('Relatório de Carregamentos', 14, 15);
+    
+    const tableData = loadings.map(l => [
+      l.driverName,
+      l.plate,
+      `${l.weight.toLocaleString()} kg`,
+      format(parseISO(l.date), 'dd/MM/yyyy'),
+      l.orderGiverName || '-',
+      `R$ ${l.driverValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`
+    ]);
+
+    autoTable(doc, {
+      head: [['Motorista', 'Placa', 'Peso', 'Data', 'Ordem', 'Valor Pago']],
+      body: tableData,
+      startY: 20,
+    });
+
+    doc.save('relatorio_carregamentos.pdf');
+  };
+
+  const exportBillingToPDF = () => {
+    const doc = new jsPDF();
+    doc.text('Relatório de Faturamento', 14, 15);
+    
+    const data = [
+      ['Total Recebido (Empresa)', `R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['Total Pago (Motoristas)', `R$ ${totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['Lucro Líquido', `R$ ${netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['Margem de Lucro', `${profitMargin.toFixed(1)}%`]
+    ];
+
+    autoTable(doc, {
+      head: [['Métrica', 'Valor']],
+      body: data,
+      startY: 20,
+    });
+
+    doc.save('relatorio_faturamento.pdf');
+  };
+
   if (loading) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
 
   // Summary Data
@@ -363,6 +551,12 @@ function MainApp() {
   const openFreights = freights.filter(f => f.status === 'Aberto').length;
   const pendingManifesto = loadings.filter(l => !l.manifestoDone).length;
   const totalCompleted = loadings.filter(l => l.unloaded).length;
+
+  // Billing Metrics
+  const totalRevenue = freights.reduce((acc, curr) => acc + (curr.valorRecebido || 0), 0);
+  const totalDriverPayout = loadings.reduce((acc, curr) => acc + (curr.driverValue || 0), 0);
+  const netProfit = totalRevenue - totalDriverPayout;
+  const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
   // Detailed Metrics
   const totalPlannedWeight = freights.reduce((acc, curr) => acc + curr.totalWeight, 0);
@@ -452,8 +646,10 @@ function MainApp() {
 
         <nav className="space-y-2">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} darkMode={darkMode} />
+          <SidebarItem icon={DollarSign} label="Faturamento" active={activeTab === 'faturamento'} onClick={() => setActiveTab('faturamento')} darkMode={darkMode} />
           <SidebarItem icon={ClipboardList} label="Novo Frete" active={activeTab === 'freights'} onClick={() => setActiveTab('freights')} darkMode={darkMode} />
           <SidebarItem icon={Plus} label="Cadastrar Motorista" active={activeTab === 'loadings'} onClick={() => setActiveTab('loadings')} darkMode={darkMode} />
+          <SidebarItem icon={Users} label="Funcionários" active={activeTab === 'employees'} onClick={() => setActiveTab('employees')} darkMode={darkMode} />
           <SidebarItem icon={FileText} label="Relatórios" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} darkMode={darkMode} />
         </nav>
 
@@ -465,6 +661,99 @@ function MainApp() {
       </aside>
 
       <main className="flex-1 p-6 md:p-10 space-y-10 overflow-y-auto">
+        {activeTab === 'faturamento' && (
+          <div className="space-y-10">
+            <div className="flex items-center justify-between">
+              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} text-2xl font-black flex items-center gap-3`}>
+                <DollarSign className="w-8 h-8 text-green-500" /> Dashboard de Faturamento
+              </h2>
+              <button 
+                onClick={exportBillingToPDF}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-500 transition-all shadow-lg shadow-green-900/20"
+              >
+                <Download className="w-4 h-4" /> Exportar PDF
+              </button>
+            </div>
+
+            <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-6 rounded-3xl border shadow-sm`}>
+                <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>Total Recebido</span>
+                <div className="text-2xl font-black text-green-600">R$ {totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-6 rounded-3xl border shadow-sm`}>
+                <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>Total Pago</span>
+                <div className="text-2xl font-black text-red-500">R$ {totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-6 rounded-3xl border shadow-sm`}>
+                <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>Lucro Líquido</span>
+                <div className="text-2xl font-black text-blue-600">R$ {netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-6 rounded-3xl border shadow-sm`}>
+                <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>Margem</span>
+                <div className={`text-2xl font-black ${profitMargin > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{profitMargin.toFixed(1)}%</div>
+              </div>
+            </section>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
+                <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6`}>Distribuição Financeira</h3>
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Lucro', value: Math.max(0, netProfit) },
+                          { name: 'Pagamento Motoristas', value: totalDriverPayout }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        <Cell fill="#3b82f6" />
+                        <Cell fill="#ef4444" />
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: darkMode ? '#18181b' : '#ffffff', border: `1px solid ${darkMode ? '#27272a' : '#e5e7eb'}`, borderRadius: '12px' }}
+                        itemStyle={{ color: darkMode ? '#ffffff' : '#111827' }}
+                        formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      />
+                      <Legend verticalAlign="bottom" height={36}/>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
+                <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6`}>Top 5 Fretes por Receita</h3>
+                <div className="space-y-4">
+                  {freights
+                    .sort((a, b) => (b.valorRecebido || 0) - (a.valorRecebido || 0))
+                    .slice(0, 5)
+                    .map((f, idx) => (
+                      <div key={f.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs">
+                            #{idx + 1}
+                          </div>
+                          <div>
+                            <div className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{f.description}</div>
+                            <div className="text-[10px] text-zinc-500">{f.product}</div>
+                          </div>
+                        </div>
+                        <div className="text-sm font-black text-green-600">
+                          R$ {(f.valorRecebido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'dashboard' && (
           <>
             {/* Summary */}
@@ -473,6 +762,14 @@ function MainApp() {
               <SummaryCard label="Fretes Abertos" value={openFreights.toString()} color="text-blue-600" darkMode={darkMode} />
               <SummaryCard label="Manifesto Pendente" value={pendingManifesto.toString()} color="text-orange-600" darkMode={darkMode} />
               <SummaryCard label="Finalizados" value={totalCompleted.toString()} color={darkMode ? 'text-white' : 'text-zinc-900'} darkMode={darkMode} />
+            </section>
+
+            {/* Faturamento */}
+            <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <SummaryCard label="Total Recebido (Empresa)" value={`R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-green-600" darkMode={darkMode} />
+              <SummaryCard label="Total Pago (Motoristas)" value={`R$ ${totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-red-500" darkMode={darkMode} />
+              <SummaryCard label="Lucro Líquido" value={`R$ ${netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-blue-600" darkMode={darkMode} />
+              <SummaryCard label="Margem de Lucro" value={`${profitMargin.toFixed(1)}%`} color={profitMargin > 0 ? "text-emerald-500" : "text-red-500"} darkMode={darkMode} />
             </section>
 
             {/* Performance Dashboard */}
@@ -779,6 +1076,36 @@ function MainApp() {
                     className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
                   />
                 </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor do Frete (R$)</label>
+                  <input 
+                    type="number" 
+                    placeholder="0.00"
+                    value={freightValorFrete}
+                    onChange={(e) => setFreightValorFrete(e.target.value)}
+                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Recebido (R$)</label>
+                  <input 
+                    type="number" 
+                    placeholder="0.00"
+                    value={freightValorRecebido}
+                    onChange={(e) => setFreightValorRecebido(e.target.value)}
+                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Pago ao Motorista (R$)</label>
+                  <input 
+                    type="number" 
+                    placeholder="0.00"
+                    value={freightValorPagoMotorista}
+                    onChange={(e) => setFreightValorPagoMotorista(e.target.value)}
+                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                  />
+                </div>
                 <div className="md:col-span-6 space-y-2">
                   <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
                   <textarea 
@@ -851,16 +1178,29 @@ function MainApp() {
                             <span className={`${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'} px-1.5 py-0.5 rounded`}>{f.destination}</span>
                           </div>
                         </div>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeletingId(f.id);
-                            setDeletingType('freight');
-                          }}
-                          className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors p-1`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEditingFreight(f);
+                            }}
+                            className={`${darkMode ? 'text-zinc-700 hover:text-blue-500' : 'text-zinc-300 hover:text-blue-500'} transition-colors p-1`}
+                            title="Editar Frete"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingId(f.id);
+                              setDeletingType('freight');
+                            }}
+                            className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors p-1`}
+                            title="Excluir Frete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="space-y-2">
@@ -873,6 +1213,24 @@ function MainApp() {
                             className="h-full bg-blue-500 transition-all duration-500" 
                             style={{ width: `${progress}%` }}
                           />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-0.5`}>Recebido</span>
+                            <div className="text-xs font-bold text-green-600">R$ {(f.valorRecebido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                          </div>
+                          <div>
+                            <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-0.5`}>Lucro</span>
+                            <div className={`text-xs font-bold ${((f.valorRecebido || 0) - relatedLoadings.reduce((acc, curr) => acc + (curr.driverValue || 0), 0)) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                              R$ {((f.valorRecebido || 0) - relatedLoadings.reduce((acc, curr) => acc + (curr.driverValue || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${f.status === 'Aberto' ? 'bg-blue-500/10 text-blue-500' : 'bg-green-500/10 text-green-500'}`}>
+                          {f.status}
                         </div>
                       </div>
 
@@ -961,6 +1319,35 @@ function MainApp() {
                     />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Quem deu a ordem</label>
+                  <div className="relative">
+                    <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'} z-10`} />
+                    <select 
+                      value={orderGiverId}
+                      onChange={(e) => setOrderGiverId(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none`}
+                    >
+                      <option value="">Selecione...</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor (R$)</label>
+                  <div className="relative">
+                    <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                    <input 
+                      type="number" 
+                      placeholder="0.00"
+                      value={driverValue}
+                      onChange={(e) => setDriverValue(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                </div>
                 <div className="md:col-span-2 space-y-2">
                   <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
                   <textarea 
@@ -1044,6 +1431,23 @@ function MainApp() {
                             className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
                             placeholder="Peso"
                           />
+                          <select 
+                            value={editOrderGiverId}
+                            onChange={(e) => setEditOrderGiverId(e.target.value)}
+                            className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
+                          >
+                            <option value="">Quem deu a ordem...</option>
+                            {employees.map(emp => (
+                              <option key={emp.id} value={emp.id}>{emp.name}</option>
+                            ))}
+                          </select>
+                          <input 
+                            type="number" 
+                            value={editDriverValue}
+                            onChange={(e) => setEditDriverValue(e.target.value)}
+                            className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
+                            placeholder="Valor (R$)"
+                          />
                           <textarea 
                             value={editObservations}
                             onChange={(e) => setEditObservations(e.target.value)}
@@ -1077,6 +1481,18 @@ function MainApp() {
                                 <span>{loading.weight.toLocaleString()} kg</span>
                                 <span>•</span>
                                 <span>{format(parseISO(loading.date), 'dd/MM HH:mm')}</span>
+                              </div>
+                              <div className={`flex items-center gap-3 text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mt-1`}>
+                                {loading.orderGiverName && (
+                                  <span className="flex items-center gap-1">
+                                    <UserIcon className="w-3 h-3" /> Ordem: {loading.orderGiverName}
+                                  </span>
+                                )}
+                                {loading.driverValue !== undefined && (
+                                  <span className="flex items-center gap-1 font-bold text-green-600">
+                                    <DollarSign className="w-3 h-3" /> R$ {loading.driverValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </span>
+                                )}
                               </div>
                               {loading.observations && (
                                 <p className={`text-[10px] italic mt-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} max-w-md truncate`}>
@@ -1136,43 +1552,150 @@ function MainApp() {
           </>
         )}
 
+        {activeTab === 'employees' && (
+          <div className="space-y-10">
+            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
+              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
+                <Users className="w-5 h-5 text-blue-500" /> Cadastrar Funcionário
+              </h2>
+              <form onSubmit={handleSubmitEmployee} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Nome</label>
+                  <input 
+                    type="text" 
+                    placeholder="Nome completo"
+                    value={employeeName}
+                    onChange={(e) => setEmployeeName(e.target.value)}
+                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Cargo/Função</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Expedição, Administrativo"
+                    value={employeeRole}
+                    onChange={(e) => setEmployeeRole(e.target.value)}
+                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button 
+                    disabled={isSubmittingEmployee}
+                    className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                  >
+                    {isSubmittingEmployee ? 'Salvando...' : 'Cadastrar'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold px-2`}>Funcionários Ativos</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {employees.map(emp => (
+                  <div key={emp.id} className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-6 rounded-3xl flex items-center justify-between shadow-sm transition-colors`}>
+                    <div>
+                      <h3 className={`font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{emp.name}</h3>
+                      <p className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>{emp.role}</p>
+                    </div>
+                    <button 
+                      onClick={() => deleteEmployee(emp.id)}
+                      className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors`}
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+                {employees.length === 0 && (
+                  <div className={`text-center py-20 border-2 border-dashed ${darkMode ? 'border-zinc-800' : 'border-zinc-100'} rounded-3xl col-span-full`}>
+                    <p className={`${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Nenhum funcionário cadastrado.</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
         {activeTab === 'reports' && (
           <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 space-y-6 shadow-sm transition-colors`}>
             <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
               <Download className="w-5 h-5 text-green-500" /> Exportar Relatórios
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button 
-                onClick={() => exportToCSV(freights, 'relatorio_fretes')}
-                className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-blue-500/50' : 'bg-white border-zinc-200 hover:border-blue-500/50'} rounded-2xl transition-all group shadow-sm`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 ${darkMode ? 'bg-blue-500/20' : 'bg-blue-500/10'} rounded-xl text-blue-500`}>
-                    <ClipboardList className="w-6 h-6" />
-                  </div>
-                  <div className="text-left">
-                    <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>Relatório de Fretes</div>
-                    <div className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Lista completa de fretes e progresso</div>
-                  </div>
-                </div>
-                <Download className={`w-5 h-5 ${darkMode ? 'text-zinc-700' : 'text-zinc-300'} group-hover:text-blue-500 transition-colors`} />
-              </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h3 className={`text-sm font-bold ${darkMode ? 'text-zinc-400' : 'text-zinc-500'} ml-2`}>Exportar CSV</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <button 
+                    onClick={() => exportToCSV(freights, 'relatorio_fretes')}
+                    className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-blue-500/50' : 'bg-white border-zinc-200 hover:border-blue-500/50'} rounded-2xl transition-all group shadow-sm`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 ${darkMode ? 'bg-blue-500/20' : 'bg-blue-500/10'} rounded-xl text-blue-500`}>
+                        <ClipboardList className="w-6 h-6" />
+                      </div>
+                      <div className="text-left">
+                        <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>Fretes (CSV)</div>
+                        <div className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Lista completa em formato CSV</div>
+                      </div>
+                    </div>
+                    <Download className={`w-5 h-5 ${darkMode ? 'text-zinc-700' : 'text-zinc-300'} group-hover:text-blue-500 transition-colors`} />
+                  </button>
 
-              <button 
-                onClick={() => exportToCSV(loadings, 'relatorio_carregamentos')}
-                className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-green-500/50' : 'bg-white border-zinc-200 hover:border-green-500/50'} rounded-2xl transition-all group shadow-sm`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 ${darkMode ? 'bg-green-500/20' : 'bg-green-500/10'} rounded-xl text-green-500`}>
-                    <Truck className="w-6 h-6" />
-                  </div>
-                  <div className="text-left">
-                    <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>Relatório de Carregamentos</div>
-                    <div className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Histórico de viagens e motoristas</div>
-                  </div>
+                  <button 
+                    onClick={() => exportToCSV(loadings, 'relatorio_carregamentos')}
+                    className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-green-500/50' : 'bg-white border-zinc-200 hover:border-green-500/50'} rounded-2xl transition-all group shadow-sm`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 ${darkMode ? 'bg-green-500/20' : 'bg-green-500/10'} rounded-xl text-green-500`}>
+                        <Truck className="w-6 h-6" />
+                      </div>
+                      <div className="text-left">
+                        <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>Carregamentos (CSV)</div>
+                        <div className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Histórico em formato CSV</div>
+                      </div>
+                    </div>
+                    <Download className={`w-5 h-5 ${darkMode ? 'text-zinc-700' : 'text-zinc-300'} group-hover:text-green-500 transition-colors`} />
+                  </button>
                 </div>
-                <Download className={`w-5 h-5 ${darkMode ? 'text-zinc-700' : 'text-zinc-300'} group-hover:text-green-500 transition-colors`} />
-              </button>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className={`text-sm font-bold ${darkMode ? 'text-zinc-400' : 'text-zinc-500'} ml-2`}>Exportar PDF (Relatórios Oficiais)</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <button 
+                    onClick={exportFreightsToPDF}
+                    className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-red-500/50' : 'bg-white border-zinc-200 hover:border-red-500/50'} rounded-2xl transition-all group shadow-sm`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 ${darkMode ? 'bg-red-500/20' : 'bg-red-500/10'} rounded-xl text-red-500`}>
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      <div className="text-left">
+                        <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>Fretes (PDF)</div>
+                        <div className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Relatório formatado para impressão</div>
+                      </div>
+                    </div>
+                    <Download className={`w-5 h-5 ${darkMode ? 'text-zinc-700' : 'text-zinc-300'} group-hover:text-red-500 transition-colors`} />
+                  </button>
+
+                  <button 
+                    onClick={exportLoadingsToPDF}
+                    className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-orange-500/50' : 'bg-white border-zinc-200 hover:border-orange-500/50'} rounded-2xl transition-all group shadow-sm`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 ${darkMode ? 'bg-orange-500/20' : 'bg-orange-500/10'} rounded-xl text-orange-500`}>
+                        <Truck className="w-6 h-6" />
+                      </div>
+                      <div className="text-left">
+                        <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>Carregamentos (PDF)</div>
+                        <div className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Relatório detalhado de viagens</div>
+                      </div>
+                    </div>
+                    <Download className={`w-5 h-5 ${darkMode ? 'text-zinc-700' : 'text-zinc-300'} group-hover:text-orange-500 transition-colors`} />
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
         )}
@@ -1226,6 +1749,33 @@ function MainApp() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Valor do Frete</span>
+                    <div className="text-blue-600 font-bold">
+                      R$ {freights.find(f => f.id === viewingFreightId)?.valorFrete?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Valor Recebido</span>
+                    <div className="text-green-600 font-bold">
+                      R$ {freights.find(f => f.id === viewingFreightId)?.valorRecebido?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Pago ao Motorista</span>
+                    <div className="text-orange-600 font-bold">
+                      R$ {freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Lucro Real</span>
+                    <div className={`font-bold ${((freights.find(f => f.id === viewingFreightId)?.valorRecebido || 0) - loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + (curr.driverValue || 0), 0)) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                      R$ {((freights.find(f => f.id === viewingFreightId)?.valorRecebido || 0) - loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + (curr.driverValue || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+
                 {freights.find(f => f.id === viewingFreightId)?.observations && (
                   <div className={`${darkMode ? 'bg-blue-500/5 border-blue-500/10' : 'bg-blue-50 border-blue-100'} border p-4 rounded-2xl`}>
                     <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-blue-400' : 'text-blue-600'} block mb-1`}>Observações do Frete</span>
@@ -1248,17 +1798,29 @@ function MainApp() {
                             <div className={`w-10 h-10 ${darkMode ? 'bg-zinc-800' : 'bg-zinc-50'} rounded-xl flex items-center justify-center text-green-500`}>
                               <UserIcon className="w-5 h-5" />
                             </div>
-                            <div>
-                              <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold text-sm`}>{loading.driverName}</div>
-                              <div className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} font-mono`}>
-                                {loading.plate} • {loading.weight.toLocaleString()} kg • {format(parseISO(loading.date), 'dd/MM HH:mm')}
+                              <div>
+                                <div className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold text-sm`}>{loading.driverName}</div>
+                                <div className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} font-mono`}>
+                                  {loading.plate} • {loading.weight.toLocaleString()} kg • {format(parseISO(loading.date), 'dd/MM HH:mm')}
+                                </div>
+                                <div className={`flex items-center gap-3 text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mt-1`}>
+                                  {loading.orderGiverName && (
+                                    <span className="flex items-center gap-1">
+                                      <UserIcon className="w-3 h-3" /> Ordem: {loading.orderGiverName}
+                                    </span>
+                                  )}
+                                  {loading.driverValue !== undefined && (
+                                    <span className="flex items-center gap-1 font-bold text-green-600">
+                                      <DollarSign className="w-3 h-3" /> R$ {loading.driverValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </span>
+                                  )}
+                                </div>
+                                {loading.observations && (
+                                  <p className={`text-[10px] italic mt-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                    Obs: {loading.observations}
+                                  </p>
+                                )}
                               </div>
-                              {loading.observations && (
-                                <p className={`text-[10px] italic mt-1 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                  Obs: {loading.observations}
-                                </p>
-                              )}
-                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${loading.manifestoDone ? 'bg-green-500/10 text-green-500' : 'bg-zinc-500/10 text-zinc-500'}`}>
@@ -1285,6 +1847,143 @@ function MainApp() {
                   className={`w-full px-6 py-3 ${darkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'} font-bold rounded-2xl transition-all`}
                 >
                   Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Edição de Frete */}
+        {editingFreightId && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
+            <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-8 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col space-y-6 shadow-2xl transition-colors`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 text-blue-500">
+                  <div className="p-3 bg-blue-500/10 rounded-2xl">
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>Editar Frete</h3>
+                    <p className={`text-sm ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Atualize as informações do frete</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={cancelEditingFreight}
+                  className={`p-2 rounded-xl ${darkMode ? 'hover:bg-zinc-800 text-zinc-500' : 'hover:bg-zinc-100 text-zinc-400'} transition-colors`}
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 space-y-6 custom-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Descrição</label>
+                    <input 
+                      type="text" 
+                      value={editFreightDesc}
+                      onChange={(e) => setEditFreightDesc(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Produto</label>
+                    <input 
+                      type="text" 
+                      value={editFreightProduct}
+                      onChange={(e) => setEditFreightProduct(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Origem</label>
+                    <input 
+                      type="text" 
+                      value={editFreightOrigin}
+                      onChange={(e) => setEditFreightOrigin(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Destino</label>
+                    <input 
+                      type="text" 
+                      value={editFreightDestination}
+                      onChange={(e) => setEditFreightDestination(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Peso Total (kg)</label>
+                    <input 
+                      type="number" 
+                      value={editFreightTotalWeight}
+                      onChange={(e) => setEditFreightTotalWeight(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Status</label>
+                    <select 
+                      value={editFreightStatus}
+                      onChange={(e) => setEditFreightStatus(e.target.value as any)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    >
+                      <option value="Aberto">Aberto</option>
+                      <option value="Finalizado">Finalizado</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor do Frete (R$)</label>
+                    <input 
+                      type="number" 
+                      value={editFreightValorFrete}
+                      onChange={(e) => setEditFreightValorFrete(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Recebido (R$)</label>
+                    <input 
+                      type="number" 
+                      value={editFreightValorRecebido}
+                      onChange={(e) => setEditFreightValorRecebido(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Pago ao Motorista (R$)</label>
+                    <input 
+                      type="number" 
+                      value={editFreightValorPagoMotorista}
+                      onChange={(e) => setEditFreightValorPagoMotorista(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none`}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
+                  <textarea 
+                    value={editFreightObservations}
+                    onChange={(e) => setEditFreightObservations(e.target.value)}
+                    rows={3}
+                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none resize-none`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800/50">
+                <button 
+                  onClick={cancelEditingFreight}
+                  className={`px-6 py-3 rounded-xl font-bold ${darkMode ? 'text-zinc-500 hover:text-white' : 'text-zinc-400 hover:text-zinc-900'} transition-colors`}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => saveEditFreight(editingFreightId!)}
+                  className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                >
+                  Salvar Alterações
                 </button>
               </div>
             </div>

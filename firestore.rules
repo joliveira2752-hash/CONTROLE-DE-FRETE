@@ -19,7 +19,12 @@ service cloud.firestore {
              data.origin is string && data.origin.size() < 100 &&
              data.destination is string && data.destination.size() < 100 &&
              data.totalWeight is number && data.totalWeight >= 0 &&
-             data.status in ["Aberto", "Finalizado"];
+             data.status in ["Aberto", "Finalizado"] &&
+             data.date is string &&
+             (!('observations' in data) || data.observations is string) &&
+             (!('valorFrete' in data) || data.valorFrete is number) &&
+             (!('valorRecebido' in data) || data.valorRecebido is number) &&
+             (!('valorPagoMotorista' in data) || data.valorPagoMotorista is number);
     }
 
     function isValidLoading(data, isCreate) {
@@ -33,7 +38,19 @@ service cloud.firestore {
              data.plate is string && data.plate.size() > 0 && data.plate.size() < 20 &&
              data.weight is number && data.weight >= 0 &&
              data.manifestoDone is bool &&
-             data.unloaded is bool;
+             data.unloaded is bool &&
+             data.date is string &&
+             (!('observations' in data) || data.observations is string) &&
+             (!('orderGiverId' in data) || data.orderGiverId is string) &&
+             (!('orderGiverName' in data) || data.orderGiverName is string) &&
+             (!('driverValue' in data) || data.driverValue is number);
+    }
+
+    function isValidEmployee(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.role is string && data.role.size() > 0 && data.role.size() < 100 &&
+             data.active is bool &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
     match /freights/{id} {
@@ -47,6 +64,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidLoading(request.resource.data, true);
       allow update: if isValidLoading(request.resource.data, false);
+      allow delete: if true;
+    }
+
+    match /employees/{id} {
+      allow read: if true;
+      allow create: if isValidEmployee(request.resource.data);
+      allow update: if isValidEmployee(request.resource.data);
       allow delete: if true;
     }
     

@@ -8,6 +8,16 @@ export interface Freight {
   status: 'Aberto' | 'Finalizado';
   date: string;
   observations?: string;
+  valorFrete?: number;
+  valorRecebido?: number;
+  valorPagoMotorista?: number;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  role: string;
+  active: boolean;
 }
 
 export interface Loading {
@@ -20,4 +30,7 @@ export interface Loading {
   unloaded: boolean;
   date: string;
   observations?: string;
+  orderGiverId?: string;
+  orderGiverName?: string;
+  driverValue?: number;
 }
