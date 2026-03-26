@@ -19,10 +19,11 @@ import {
   doc,
   deleteDoc,
   setDoc,
-  serverTimestamp
+  serverTimestamp,
+  where
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
-import { Loading, Freight, Employee } from './types';
+import { Loading, Freight, Employee, Branch, UserProfile } from './types';
 import { 
   Truck, 
   Calendar,
@@ -124,13 +125,23 @@ export default function App() {
 }
 
 function MainApp() {
+  const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [loadings, setLoadings] = useState<Loading[]>([]);
   const [freights, setFreights] = useState<Freight[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'freights' | 'loadings' | 'employees' | 'reports' | 'faturamento'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'freights' | 'loadings' | 'employees' | 'reports' | 'faturamento' | 'management'>('dashboard');
   
-  // Freight Form State
+  // Management State
+  const [newBranchName, setNewBranchName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'user'>('user');
+  const [newUserBranchId, setNewUserBranchId] = useState('');
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [freightDesc, setFreightDesc] = useState('');
   const [freightProduct, setFreightProduct] = useState('');
   const [freightOrigin, setFreightOrigin] = useState('');
@@ -246,30 +257,97 @@ function MainApp() {
   }, [darkMode]);
 
   useEffect(() => {
-    // Auth listener removed as login is no longer required
-    setLoading(false);
+    const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Fetch user profile
+        const unsubProfile = onSnapshot(doc(db, 'users', currentUser.uid), async (docSnap) => {
+          if (docSnap.exists()) {
+            const profile = { id: docSnap.id, ...docSnap.data() } as UserProfile;
+            setUserProfile(profile);
+            if (profile.role !== 'master' && profile.branchId) {
+              setSelectedBranchId(profile.branchId);
+            }
+          } else {
+            // Check if it's the master email
+            if (currentUser.email === 'joliveira2752@gmail.com') {
+              const masterProfile: UserProfile = {
+                id: currentUser.uid,
+                email: currentUser.email!,
+                role: 'master',
+                name: currentUser.displayName || 'Master Admin'
+              };
+              await setDoc(doc(db, 'users', currentUser.uid), masterProfile);
+              setUserProfile(masterProfile);
+            } else {
+              console.log("No profile found for user", currentUser.uid);
+            }
+          }
+          setLoading(false);
+        });
+        return () => unsubProfile();
+      } else {
+        setUserProfile(null);
+        setLoading(false);
+      }
+    });
+    return () => unsubAuth();
   }, []);
 
   useEffect(() => {
-    // Fetching data without requiring a user object
-    console.log("Setting up snapshots...");
-    const unsubLoadings = onSnapshot(query(collection(db, 'loadings'), orderBy('date', 'desc')), (snapshot) => {
-      console.log("Loadings snapshot received:", snapshot.size, "docs");
+    if (!userProfile) return;
+
+    // Fetch branches for master
+    if (userProfile.role === 'master') {
+      const unsubBranches = onSnapshot(collection(db, 'branches'), (snapshot) => {
+        setBranches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
+      });
+      const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
+      });
+      return () => {
+        unsubBranches();
+        unsubUsers();
+      };
+    } else if (userProfile.branchId) {
+      // Fetch only the assigned branch for non-master
+      const unsubBranch = onSnapshot(doc(db, 'branches', userProfile.branchId), (docSnap) => {
+        if (docSnap.exists()) {
+          setBranches([{ id: docSnap.id, ...docSnap.data() } as Branch]);
+        }
+      });
+      return () => unsubBranch();
+    }
+  }, [userProfile]);
+
+  useEffect(() => {
+    if (!userProfile) return;
+    
+    console.log("Setting up snapshots with branch filter:", selectedBranchId);
+    
+    let loadingsQuery = query(collection(db, 'loadings'), orderBy('date', 'desc'));
+    let freightsQuery = query(collection(db, 'freights'), orderBy('date', 'desc'));
+    let employeesQuery = query(collection(db, 'employees'), orderBy('name', 'asc'));
+
+    if (selectedBranchId) {
+      loadingsQuery = query(collection(db, 'loadings'), where('branchId', '==', selectedBranchId), orderBy('date', 'desc'));
+      freightsQuery = query(collection(db, 'freights'), where('branchId', '==', selectedBranchId), orderBy('date', 'desc'));
+      employeesQuery = query(collection(db, 'employees'), where('branchId', '==', selectedBranchId), orderBy('name', 'asc'));
+    }
+
+    const unsubLoadings = onSnapshot(loadingsQuery, (snapshot) => {
       setLoadings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Loading)));
     }, (error) => {
-      console.error("Loadings snapshot error:", error);
       handleFirestoreError(error, OperationType.LIST, 'loadings');
     });
 
-    const unsubFreights = onSnapshot(query(collection(db, 'freights'), orderBy('date', 'desc')), (snapshot) => {
-      console.log("Freights snapshot received:", snapshot.size, "docs");
+    const unsubFreights = onSnapshot(freightsQuery, (snapshot) => {
       setFreights(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Freight)));
     }, (error) => {
-      console.error("Freights snapshot error:", error);
       handleFirestoreError(error, OperationType.LIST, 'freights');
     });
 
-    const unsubEmployees = onSnapshot(query(collection(db, 'employees'), orderBy('name', 'asc')), (snapshot) => {
+    const unsubEmployees = onSnapshot(employeesQuery, (snapshot) => {
       setEmployees(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'employees');
@@ -280,17 +358,63 @@ function MainApp() {
       unsubFreights();
       unsubEmployees();
     };
-  }, []);
+  }, [userProfile, selectedBranchId]);
+
+  const handleCreateBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBranchName || userProfile?.role !== 'master') return;
+    try {
+      await addDoc(collection(db, 'branches'), {
+        name: newBranchName,
+        active: true,
+        createdAt: new Date().toISOString()
+      });
+      setNewBranchName('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'branches');
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserEmail || !newUserName || !newUserBranchId || userProfile?.role !== 'master') return;
+    // Note: This only creates the profile. The user still needs to authenticate.
+    // In a real app, you'd use a Cloud Function to create the Auth user too.
+    try {
+      // We use a random ID or the email as ID if we want to pre-provision
+      // But usually we'd wait for them to sign up.
+      // For this demo, we'll just add it to 'users' collection.
+      // We'll need a way to link it when they first log in.
+      // A better way is to use the email as the document ID or a field.
+      await addDoc(collection(db, 'users'), {
+        email: newUserEmail.toLowerCase(),
+        name: newUserName,
+        role: newUserRole,
+        branchId: newUserBranchId,
+        createdAt: new Date().toISOString()
+      });
+      setNewUserEmail('');
+      setNewUserName('');
+      setNewUserBranchId('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'users');
+    }
+  };
 
   const handleSubmitEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedBranchId) {
+      alert("Selecione uma filial primeiro!");
+      return;
+    }
     if (!employeeName || !employeeRole) return;
     setIsSubmittingEmployee(true);
     try {
       await addDoc(collection(db, 'employees'), {
         name: employeeName,
         role: employeeRole,
-        active: true
+        active: true,
+        branchId: selectedBranchId
       });
       setEmployeeName('');
       setEmployeeRole('');
@@ -310,25 +434,37 @@ function MainApp() {
   };
 
   const handleLogin = async () => {
-    // Login removed
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login error:", error);
+    }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    // Auth removed
-  };
-
-  const handleLogout = () => {
-    // Logout removed
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setUserProfile(null);
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
   };
 
   const handleSubmitFreight = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedBranchId) {
+      alert("Selecione uma filial primeiro!");
+      return;
+    }
     if (!freightDesc || !freightProduct || !freightTotalWeight || !freightOrigin || !freightDestination) return;
 
     setIsSubmittingFreight(true);
     const path = 'freights';
     try {
       await addDoc(collection(db, path), {
+        branchId: selectedBranchId,
         description: freightDesc,
         product: freightProduct,
         origin: freightOrigin,
@@ -359,6 +495,10 @@ function MainApp() {
 
   const handleSubmitLoading = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedBranchId) {
+      alert("Selecione uma filial primeiro!");
+      return;
+    }
     if (!selectedFreightId || !driverName || !plate || !weight) return;
 
     setIsSubmittingLoading(true);
@@ -366,6 +506,7 @@ function MainApp() {
     const orderGiver = employees.find(emp => emp.id === orderGiverId);
     try {
       await addDoc(collection(db, path), {
+        branchId: selectedBranchId,
         freightId: selectedFreightId,
         driverName,
         plate: plate.toUpperCase(),
@@ -645,6 +786,49 @@ function MainApp() {
 
   if (loading) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
 
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 space-y-8 border border-zinc-100">
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-200">
+              <Truck className="text-white w-8 h-8" />
+            </div>
+            <h1 className="text-3xl font-bold text-zinc-900">Logística Multi-Filial</h1>
+            <p className="text-zinc-500">Acesse o sistema para gerenciar suas operações</p>
+          </div>
+          
+          <button
+            onClick={handleLogin}
+            className="w-full py-4 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 shadow-lg shadow-zinc-200"
+          >
+            <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+            Entrar com Google
+          </button>
+          
+          <div className="text-center">
+            <p className="text-xs text-zinc-400 uppercase tracking-widest font-semibold">Sistema de Gestão de Transportes</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && !userProfile) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center space-y-4">
+          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto text-amber-600">
+            <X className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-zinc-900">Acesso Restrito</h2>
+          <p className="text-zinc-500">Seu usuário não possui um perfil vinculado a nenhuma filial. Entre em contato com o administrador master.</p>
+          <button onClick={handleLogout} className="text-zinc-500 hover:text-zinc-900 font-medium">Sair</button>
+        </div>
+      </div>
+    );
+  }
+
   const dashboardLoadings = loadings.filter(l => {
     const dateToCompare = l.manifestoDate || '';
     const matchesStartDate = !dashboardFilterStartDate || dateToCompare >= dashboardFilterStartDate;
@@ -828,16 +1012,177 @@ function MainApp() {
           <SidebarItem icon={Truck} label="Motorista" active={activeTab === 'loadings'} onClick={() => setActiveTab('loadings')} darkMode={darkMode} />
           <SidebarItem icon={Users} label="Funcionários" active={activeTab === 'employees'} onClick={() => setActiveTab('employees')} darkMode={darkMode} />
           <SidebarItem icon={FileText} label="Relatórios" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} darkMode={darkMode} />
+          {userProfile?.role === 'master' && (
+            <SidebarItem icon={Activity} label="Gerenciamento" active={activeTab === 'management'} onClick={() => setActiveTab('management')} darkMode={darkMode} />
+          )}
         </nav>
 
-        <div className="pt-10 border-t border-zinc-100">
-          <p className="px-4 py-3 text-[10px] text-zinc-400 uppercase font-bold tracking-widest text-center">
-            Sistema Aberto
-          </p>
+        <div className="pt-10 border-t border-zinc-100 dark:border-zinc-800">
+          <div className="flex flex-col items-center gap-4">
+            <div className="text-center">
+              <p className={`text-xs font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{userProfile?.name}</p>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{userProfile?.role}</p>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${darkMode ? 'bg-zinc-800 text-red-400 hover:bg-zinc-700' : 'bg-zinc-100 text-red-500 hover:bg-zinc-200'}`}
+            >
+              <LogOut className="w-4 h-4" /> Sair
+            </button>
+          </div>
         </div>
       </aside>
 
       <main className="flex-1 p-6 md:p-10 space-y-10 overflow-y-auto">
+        {userProfile?.role === 'master' && (
+          <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-4 rounded-2xl flex items-center justify-between shadow-sm mb-6`}>
+            <div className="flex items-center gap-3">
+              <Filter className="w-5 h-5 text-green-500" />
+              <span className={`text-sm font-bold ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>Visualizando Filial:</span>
+              <select 
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className={`text-sm font-bold outline-none bg-transparent ${darkMode ? 'text-white' : 'text-zinc-900'}`}
+              >
+                <option value="">Todas as Filiais</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+              Modo Master Admin
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'management' && userProfile?.role === 'master' && (
+          <div className="space-y-10">
+            <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} text-2xl font-black flex items-center gap-3`}>
+              <Activity className="w-8 h-8 text-green-500" /> Gerenciamento do Sistema
+            </h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Branch Management */}
+              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-8 rounded-3xl shadow-sm space-y-6`}>
+                <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-zinc-900'} flex items-center gap-2`}>
+                  <Package className="w-5 h-5 text-green-500" /> Cadastrar Nova Filial
+                </h3>
+                <form onSubmit={handleCreateBranch} className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Nome da Filial</label>
+                    <input 
+                      type="text"
+                      value={newBranchName}
+                      onChange={(e) => setNewBranchName(e.target.value)}
+                      placeholder="Ex: Filial São Paulo"
+                      className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-500/50`}
+                    />
+                  </div>
+                  <button 
+                    type="submit"
+                    className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 transition-all shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Criar Filial
+                  </button>
+                </form>
+
+                <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                  <h4 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-4`}>Filiais Ativas</h4>
+                  <div className="space-y-2">
+                    {branches.map(b => (
+                      <div key={b.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-zinc-950' : 'bg-zinc-50'}`}>
+                        <span className={`text-sm font-medium ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>{b.name}</span>
+                        <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Ativa</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* User Management */}
+              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-8 rounded-3xl shadow-sm space-y-6`}>
+                <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-zinc-900'} flex items-center gap-2`}>
+                  <Users className="w-5 h-5 text-blue-500" /> Cadastrar Novo Usuário
+                </h3>
+                <form onSubmit={handleCreateUser} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Nome Completo</label>
+                      <input 
+                        type="text"
+                        value={newUserName}
+                        onChange={(e) => setNewUserName(e.target.value)}
+                        placeholder="Nome do usuário"
+                        className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>E-mail</label>
+                      <input 
+                        type="email"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        placeholder="email@exemplo.com"
+                        className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Função</label>
+                      <select 
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'user')}
+                        className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                      >
+                        <option value="user">Usuário Comum</option>
+                        <option value="admin">Administrador de Filial</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Filial</label>
+                      <select 
+                        value={newUserBranchId}
+                        onChange={(e) => setNewUserBranchId(e.target.value)}
+                        className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                      >
+                        <option value="">Selecione uma filial</option>
+                        {branches.map(b => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button 
+                    type="submit"
+                    className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Criar Usuário
+                  </button>
+                </form>
+
+                <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                  <h4 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-4`}>Usuários Cadastrados</h4>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {allUsers.map(u => (
+                      <div key={u.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-zinc-950' : 'bg-zinc-50'}`}>
+                        <div>
+                          <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{u.name}</p>
+                          <p className="text-[10px] text-zinc-500">{u.email}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{u.role}</p>
+                          <p className="text-[9px] text-zinc-400">{branches.find(b => b.id === u.branchId)?.name || 'Master'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {activeTab === 'faturamento' && (
           <div className="space-y-10">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

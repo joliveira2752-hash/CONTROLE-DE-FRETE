@@ -5,78 +5,63 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    function isAdmin() {
-      return isAuthenticated() && 
-        ((request.auth.token.email == "joliveira2752@gmail.com" && request.auth.token.email_verified == true) ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function isValidFreight(data) {
-      return data.description is string && data.description.size() > 0 && data.description.size() < 100 &&
-             data.product is string && data.product.size() < 50 &&
-             data.origin is string && data.origin.size() < 100 &&
-             data.destination is string && data.destination.size() < 100 &&
-             data.totalWeight is number && data.totalWeight >= 0 &&
-             data.status in ["Aberto", "Finalizado"] &&
-             data.date is string &&
-             (!('observations' in data) || data.observations is string) &&
-             (!('valorFrete' in data) || data.valorFrete is number) &&
-             (!('valorRecebido' in data) || data.valorRecebido is number) &&
-             (!('valorPagoMotorista' in data) || data.valorPagoMotorista is number);
+    function isMaster() {
+      return isAuthenticated() && (
+        getUserData().role == 'master' || 
+        (request.auth.token.email == "joliveira2752@gmail.com" && request.auth.token.email_verified == true)
+      );
     }
 
-    function isValidLoading(data, isCreate) {
-      // For updates, we allow freightId to be missing if it was an old document
-      // But for creates, it's mandatory
-      let hasFreightId = 'freightId' in data && data.freightId is string && data.freightId.size() > 0;
-      let validFreightId = isCreate ? hasFreightId : (hasFreightId || !('freightId' in data));
-      
-      return validFreightId &&
-             data.driverName is string && data.driverName.size() > 0 && data.driverName.size() < 100 &&
-             data.plate is string && data.plate.size() > 0 && data.plate.size() < 20 &&
-             data.weight is number && data.weight >= 0 &&
-             data.manifestoDone is bool &&
-             data.unloaded is bool &&
-             data.date is string &&
-             (!('observations' in data) || data.observations is string) &&
-             (!('orderGiverId' in data) || data.orderGiverId is string) &&
-             (!('orderGiverName' in data) || data.orderGiverName is string) &&
-             (!('driverValue' in data) || data.driverValue is number);
+    function isBranchAdmin(branchId) {
+      let userData = getUserData();
+      return isAuthenticated() && userData.role == 'admin' && userData.branchId == branchId;
     }
 
-    function isValidEmployee(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.role is string && data.role.size() > 0 && data.role.size() < 100 &&
-             data.active is bool &&
-             (!('createdAt' in data) || data.createdAt is timestamp);
+    function isBranchUser(branchId) {
+      let userData = getUserData();
+      return isAuthenticated() && (userData.role == 'user' || userData.role == 'admin') && userData.branchId == branchId;
     }
 
-    match /freights/{id} {
-      allow read: if true;
-      allow create: if isValidFreight(request.resource.data);
-      allow update: if isValidFreight(request.resource.data);
-      allow delete: if true;
-    }
-
-    match /loadings/{id} {
-      allow read: if true;
-      allow create: if isValidLoading(request.resource.data, true);
-      allow update: if isValidLoading(request.resource.data, false);
-      allow delete: if true;
-    }
-
-    match /employees/{id} {
-      allow read: if true;
-      allow create: if isValidEmployee(request.resource.data);
-      allow update: if isValidEmployee(request.resource.data);
-      allow delete: if true;
-    }
-    
-    match /users/{userId} {
+    // Branches
+    match /branches/{branchId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isMaster();
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isMaster());
+      allow write: if isMaster() || (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'branchId']));
+      allow create: if isMaster() || (request.auth.uid == userId && request.resource.data.role == 'user');
+    }
+
+    // Freights
+    match /freights/{freightId} {
+      allow read: if isMaster() || isBranchUser(resource.data.branchId);
+      allow write: if isMaster() || isBranchAdmin(request.resource.data.branchId);
+      allow create: if isMaster() || isBranchAdmin(request.resource.data.branchId);
+      allow delete: if isMaster() || isBranchAdmin(resource.data.branchId);
+    }
+
+    // Loadings
+    match /loadings/{loadingId} {
+      allow read: if isMaster() || isBranchUser(resource.data.branchId);
+      allow write: if isMaster() || isBranchUser(request.resource.data.branchId);
+      allow create: if isMaster() || isBranchUser(request.resource.data.branchId);
+      allow delete: if isMaster() || isBranchAdmin(resource.data.branchId);
+    }
+
+    // Employees
+    match /employees/{employeeId} {
+      allow read: if isMaster() || isBranchUser(resource.data.branchId);
+      allow write: if isMaster() || isBranchAdmin(request.resource.data.branchId);
+      allow create: if isMaster() || isBranchAdmin(request.resource.data.branchId);
+      allow delete: if isMaster() || isBranchAdmin(resource.data.branchId);
     }
   }
 }

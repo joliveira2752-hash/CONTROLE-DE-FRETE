@@ -1,5 +1,5 @@
 {
-  "name": "Controle de Fretes",
-  "description": "Sistema de gestão de fretes e carregamentos para o setor agro.",
+  "name": "Logística Multi-Filial",
+  "description": "Sistema de gestão logística multi-filial com controle master admin.",
   "requestFramePermissions": []
 }

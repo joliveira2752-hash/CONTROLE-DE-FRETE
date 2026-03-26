@@ -1,5 +1,21 @@
+export interface Branch {
+  id: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: 'master' | 'admin' | 'user';
+  branchId?: string; // Optional for master, required for others
+  name: string;
+}
+
 export interface Freight {
   id: string;
+  branchId: string;
   description: string;
   product: string;
   origin: string;
@@ -15,6 +31,7 @@ export interface Freight {
 
 export interface Employee {
   id: string;
+  branchId: string;
   name: string;
   role: string;
   active: boolean;
@@ -22,6 +39,7 @@ export interface Employee {
 
 export interface Loading {
   id: string;
+  branchId: string;
   freightId: string;
   driverName: string;
   plate: string;

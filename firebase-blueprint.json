@@ -1,10 +1,34 @@
 {
   "entities": {
+    "Branch": {
+      "title": "Branch",
+      "description": "Filial da empresa",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Nome da filial" },
+        "active": { "type": "boolean", "description": "Status da filial" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "active", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil de usuário e permissões",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["master", "admin", "user"] },
+        "branchId": { "type": "string", "description": "ID da filial (opcional para master)" },
+        "name": { "type": "string" }
+      },
+      "required": ["email", "role", "name"]
+    },
     "Freight": {
       "title": "Freight",
       "description": "Contrato de frete geral",
       "type": "object",
       "properties": {
+        "branchId": { "type": "string", "description": "ID da filial" },
         "description": { "type": "string", "description": "Descrição do frete (ex: Soja - Fazenda X)" },
         "product": { "type": "string", "description": "Produto" },
         "origin": { "type": "string", "description": "Origem" },
@@ -13,13 +37,14 @@
         "status": { "type": "string", "enum": ["Aberto", "Finalizado"], "description": "Status do frete" },
         "date": { "type": "string", "format": "date-time", "description": "Data de criação" }
       },
-      "required": ["description", "product", "totalWeight", "status", "date"]
+      "required": ["branchId", "description", "product", "totalWeight", "status", "date"]
     },
     "Loading": {
       "title": "Loading",
       "description": "Registro de carregamento de caminhão",
       "type": "object",
       "properties": {
+        "branchId": { "type": "string", "description": "ID da filial" },
         "freightId": { "type": "string", "description": "ID do frete vinculado" },
         "driverName": { "type": "string", "description": "Nome do motorista" },
         "plate": { "type": "string", "description": "Placa do veículo" },
@@ -28,10 +53,12 @@
         "unloaded": { "type": "boolean", "description": "Carga descarregada?" },
         "date": { "type": "string", "format": "date-time", "description": "Data do registro" }
       },
-      "required": ["freightId", "driverName", "plate", "weight", "date"]
+      "required": ["branchId", "freightId", "driverName", "plate", "weight", "date"]
     }
   },
   "firestore": {
+    "/branches": { "schema": "Branch", "description": "Coleção de filiais" },
+    "/users": { "schema": "UserProfile", "description": "Coleção de perfis de usuários" },
     "/freights": { "schema": "Freight", "description": "Coleção de fretes" },
     "/loadings": { "schema": "Loading", "description": "Coleção de carregamentos" }
   }
