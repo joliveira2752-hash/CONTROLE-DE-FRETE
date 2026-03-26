@@ -12,8 +12,8 @@ service cloud.firestore {
 
     function isMaster() {
       return isAuthenticated() && (
-        getUserData().role == 'master' || 
-        (request.auth.token.email == "joliveira2752@gmail.com" && request.auth.token.email_verified == true)
+        (request.auth.token.email == "joliveira2752@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master')
       );
     }
 

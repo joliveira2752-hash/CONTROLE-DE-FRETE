@@ -127,6 +127,7 @@ export default function App() {
 function MainApp() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -257,11 +258,17 @@ function MainApp() {
   }, [darkMode]);
 
   useEffect(() => {
+    let unsubProfile: (() => void) | null = null;
     const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (currentUser) {
         // Fetch user profile
-        const unsubProfile = onSnapshot(doc(db, 'users', currentUser.uid), async (docSnap) => {
+        unsubProfile = onSnapshot(doc(db, 'users', currentUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
             const profile = { id: docSnap.id, ...docSnap.data() } as UserProfile;
             setUserProfile(profile);
@@ -271,27 +278,37 @@ function MainApp() {
           } else {
             // Check if it's the master email
             if (currentUser.email === 'joliveira2752@gmail.com') {
-              const masterProfile: UserProfile = {
-                id: currentUser.uid,
-                email: currentUser.email!,
-                role: 'master',
-                name: currentUser.displayName || 'Master Admin'
-              };
-              await setDoc(doc(db, 'users', currentUser.uid), masterProfile);
-              setUserProfile(masterProfile);
+              try {
+                const masterProfile: UserProfile = {
+                  id: currentUser.uid,
+                  email: currentUser.email!,
+                  role: 'master',
+                  name: currentUser.displayName || 'Master Admin'
+                };
+                await setDoc(doc(db, 'users', currentUser.uid), masterProfile);
+                setUserProfile(masterProfile);
+              } catch (err) {
+                console.error("Error creating master profile:", err);
+                setLoginError("Erro ao criar perfil mestre. Verifique as permissões.");
+              }
             } else {
               console.log("No profile found for user", currentUser.uid);
             }
           }
           setLoading(false);
+        }, (err) => {
+          console.error("Profile snapshot error:", err);
+          setLoading(false);
         });
-        return () => unsubProfile();
       } else {
         setUserProfile(null);
         setLoading(false);
       }
     });
-    return () => unsubAuth();
+    return () => {
+      unsubAuth();
+      if (unsubProfile) unsubProfile();
+    };
   }, []);
 
   useEffect(() => {
@@ -434,11 +451,19 @@ function MainApp() {
   };
 
   const handleLogin = async () => {
+    setLoginError(null);
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
+      if (error.code === 'auth/popup-blocked') {
+        setLoginError("O popup de login foi bloqueado pelo navegador. Por favor, permita popups para este site.");
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // Ignore user cancellation
+      } else {
+        setLoginError("Erro ao fazer login: " + (error.message || "Tente novamente mais tarde."));
+      }
     }
   };
 
@@ -805,6 +830,12 @@ function MainApp() {
             <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
             Entrar com Google
           </button>
+
+          {loginError && (
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium text-center">
+              {loginError}
+            </div>
+          )}
           
           <div className="text-center">
             <p className="text-xs text-zinc-400 uppercase tracking-widest font-semibold">Sistema de Gestão de Transportes</p>
