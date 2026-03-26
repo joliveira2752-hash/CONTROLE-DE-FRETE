@@ -645,29 +645,43 @@ function MainApp() {
 
   if (loading) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
 
-  // Summary Data (Filtered for the Dashboard)
   const dashboardLoadings = loadings.filter(l => {
-    const matchesStartDate = !dashboardFilterStartDate || l.date >= dashboardFilterStartDate;
-    const matchesEndDate = !dashboardFilterEndDate || l.date <= dashboardFilterEndDate;
+    const dateToCompare = l.manifestoDate || '';
+    const matchesStartDate = !dashboardFilterStartDate || dateToCompare >= dashboardFilterStartDate;
+    const matchesEndDate = !dashboardFilterEndDate || dateToCompare <= dashboardFilterEndDate;
     return matchesStartDate && matchesEndDate;
   });
 
+  const pendingManifesto = loadings.filter(l => {
+    const matchesStartDate = !dashboardFilterStartDate || l.date >= dashboardFilterStartDate;
+    const matchesEndDate = !dashboardFilterEndDate || l.date <= dashboardFilterEndDate;
+    return matchesStartDate && matchesEndDate && !l.manifestoDone;
+  }).length;
+
   const dashboardFreights = freights.filter(f => {
-    const matchesStartDate = !dashboardFilterStartDate || f.date >= dashboardFilterStartDate;
-    const matchesEndDate = !dashboardFilterEndDate || f.date <= dashboardFilterEndDate;
-    return matchesStartDate && matchesEndDate;
+    const matchesDate = (!dashboardFilterStartDate || f.date >= dashboardFilterStartDate) &&
+                        (!dashboardFilterEndDate || f.date <= dashboardFilterEndDate);
+    
+    const hasManifestedLoadings = loadings.some(l => 
+      l.freightId === f.id && 
+      l.manifestoDate && 
+      (!dashboardFilterStartDate || l.manifestoDate >= dashboardFilterStartDate) &&
+      (!dashboardFilterEndDate || l.manifestoDate <= dashboardFilterEndDate)
+    );
+
+    return matchesDate || hasManifestedLoadings;
   });
 
   const totalWeight = dashboardLoadings.reduce((acc, curr) => acc + curr.weight, 0);
   const openFreights = dashboardFreights.filter(f => f.status === 'Aberto').length;
-  const pendingManifesto = dashboardLoadings.filter(l => !l.manifestoDone).length;
   const totalCompleted = dashboardLoadings.filter(l => l.unloaded).length;
 
   // Billing Metrics (Filtered for the Billing Dashboard)
   const billingLoadings = loadings.filter(l => {
     const matchesFreight = !billingFilterFreightId || l.freightId === billingFilterFreightId;
-    const matchesStartDate = !billingFilterStartDate || l.date >= billingFilterStartDate;
-    const matchesEndDate = !billingFilterEndDate || l.date <= billingFilterEndDate;
+    const dateToCompare = l.manifestoDate || '';
+    const matchesStartDate = !billingFilterStartDate || dateToCompare >= billingFilterStartDate;
+    const matchesEndDate = !billingFilterEndDate || dateToCompare <= billingFilterEndDate;
     return matchesFreight && matchesStartDate && matchesEndDate;
   });
 
@@ -689,8 +703,9 @@ function MainApp() {
 
   // Dashboard Billing Metrics (Filtered for the Main Dashboard)
   const dashboardBillingLoadings = loadings.filter(l => {
-    const matchesStartDate = !dashboardFilterStartDate || l.date >= dashboardFilterStartDate;
-    const matchesEndDate = !dashboardFilterEndDate || l.date <= dashboardFilterEndDate;
+    const dateToCompare = l.manifestoDate || '';
+    const matchesStartDate = !dashboardFilterStartDate || dateToCompare >= dashboardFilterStartDate;
+    const matchesEndDate = !dashboardFilterEndDate || dateToCompare <= dashboardFilterEndDate;
     return matchesStartDate && matchesEndDate;
   });
 
@@ -746,7 +761,7 @@ function MainApp() {
   }));
 
   // Freight Performance Data
-  const freightPerformance = dashboardFreights.map(f => {
+  const freightPerformance = freights.map(f => {
     const loadedWeight = dashboardLoadings
       .filter(l => l.freightId === f.id)
       .reduce((acc, curr) => acc + curr.weight, 0);
@@ -1053,7 +1068,11 @@ function MainApp() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {billingLoadings.sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()).map(l => {
+                    {billingLoadings.sort((a, b) => {
+                      const dateA = a.manifestoDate || a.date || '0000-00-00';
+                      const dateB = b.manifestoDate || b.date || '0000-00-00';
+                      return dateB.localeCompare(dateA);
+                    }).map(l => {
                       const freight = freights.find(f => f.id === l.freightId);
                       const rev = (l.weight / 1000) * (freight?.valorFrete || 0);
                       const pay = (l.weight / 1000) * (freight?.valorPagoMotorista || 0);
@@ -1068,7 +1087,7 @@ function MainApp() {
                           <td className="py-4 text-blue-500 font-bold">R$ {rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                           <td className="py-4 text-orange-500 font-bold">R$ {pay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                           <td className="py-4 text-green-600 font-black">R$ {prof.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          <td className="py-4 text-xs">{format(parseISO(l.date), 'dd/MM/yyyy')}</td>
+                          <td className="py-4 text-xs">{l.manifestoDate ? format(parseISO(l.manifestoDate), 'dd/MM/yyyy') : '-'}</td>
                         </tr>
                       );
                     })}
@@ -1294,7 +1313,7 @@ function MainApp() {
                           <Truck className={`w-3 h-3 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
                           <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Viagens</span>
                         </div>
-                        <div className={`text-xl font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{loadings.length}</div>
+                        <div className={`text-xl font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{dashboardLoadings.length}</div>
                       </div>
                     </div>
 
