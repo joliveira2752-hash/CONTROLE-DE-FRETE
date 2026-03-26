@@ -25,6 +25,7 @@ import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { Loading, Freight, Employee } from './types';
 import { 
   Truck, 
+  Calendar,
   User as UserIcon, 
   Weight, 
   FileText, 
@@ -47,7 +48,9 @@ import {
   Moon,
   Sun,
   Eye,
-  DollarSign
+  DollarSign,
+  Filter,
+  Search
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { 
@@ -144,6 +147,9 @@ function MainApp() {
   const [driverName, setDriverName] = useState('');
   const [plate, setPlate] = useState('');
   const [weight, setWeight] = useState('');
+  const [loadingDate, setLoadingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [manifestoDate, setManifestoDate] = useState('');
+  const [unloadedDate, setUnloadedDate] = useState('');
   const [orderGiverId, setOrderGiverId] = useState('');
   const [driverUnitPrice, setDriverUnitPrice] = useState('');
   const [driverValue, setDriverValue] = useState('');
@@ -158,6 +164,9 @@ function MainApp() {
   const [editDriverName, setEditDriverName] = useState('');
   const [editPlate, setEditPlate] = useState('');
   const [editWeight, setEditWeight] = useState('');
+  const [editLoadingDate, setEditLoadingDate] = useState('');
+  const [editManifestoDate, setEditManifestoDate] = useState('');
+  const [editUnloadedDate, setEditUnloadedDate] = useState('');
   const [editObservations, setEditObservations] = useState('');
   const [editOrderGiverId, setEditOrderGiverId] = useState('');
   const [editDriverUnitPrice, setEditDriverUnitPrice] = useState('');
@@ -218,10 +227,19 @@ function MainApp() {
   const [loadingFilterDriver, setLoadingFilterDriver] = useState('');
   const [loadingFilterPlate, setLoadingFilterPlate] = useState('');
   const [loadingFilterDate, setLoadingFilterDate] = useState('');
+  const [loadingFilterManifestDate, setLoadingFilterManifestDate] = useState('');
+  const [loadingFilterUnloadDate, setLoadingFilterUnloadDate] = useState('');
+  const [loadingFilterFreightId, setLoadingFilterFreightId] = useState('');
   const [loadingFilterStatus, setLoadingFilterStatus] = useState<'Todos' | 'Manifesto' | 'Descarregado' | 'Pendente'>('Todos');
   const [billingFilterFreightId, setBillingFilterFreightId] = useState('');
   const [billingFilterStartDate, setBillingFilterStartDate] = useState('');
   const [billingFilterEndDate, setBillingFilterEndDate] = useState('');
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [dashboardFilterStartDate, setDashboardFilterStartDate] = useState('');
+  const [dashboardFilterEndDate, setDashboardFilterEndDate] = useState('');
+  const [reportFilterStartDate, setReportFilterStartDate] = useState('');
+  const [reportFilterEndDate, setReportFilterEndDate] = useState('');
+  const [freightSearch, setFreightSearch] = useState('');
 
   useEffect(() => {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
@@ -354,7 +372,9 @@ function MainApp() {
         weight: Number(weight),
         manifestoDone: false,
         unloaded: false,
-        date: new Date().toISOString(),
+        date: loadingDate,
+        manifestoDate: manifestoDate || null,
+        unloadedDate: unloadedDate || null,
         observations: loadingObservations,
         orderGiverId: orderGiverId || null,
         orderGiverName: orderGiver?.name || null,
@@ -364,6 +384,9 @@ function MainApp() {
       setDriverName('');
       setPlate('');
       setWeight('');
+      setLoadingDate(new Date().toISOString().split('T')[0]);
+      setManifestoDate('');
+      setUnloadedDate('');
       setLoadingObservations('');
       setOrderGiverId('');
       setDriverUnitPrice('');
@@ -413,6 +436,9 @@ function MainApp() {
     setEditDriverName(loading.driverName);
     setEditPlate(loading.plate);
     setEditWeight(loading.weight.toString());
+    setEditLoadingDate(loading.date);
+    setEditManifestoDate(loading.manifestoDate || '');
+    setEditUnloadedDate(loading.unloadedDate || '');
     setEditObservations(loading.observations || '');
     setEditOrderGiverId(loading.orderGiverId || '');
     setEditDriverUnitPrice(loading.driverUnitPrice?.toString() || '');
@@ -431,6 +457,9 @@ function MainApp() {
         driverName: editDriverName,
         plate: editPlate.toUpperCase(),
         weight: Number(editWeight),
+        date: editLoadingDate,
+        manifestoDate: editManifestoDate || null,
+        unloadedDate: editUnloadedDate || null,
         observations: editObservations,
         orderGiverId: editOrderGiverId || null,
         orderGiverName: orderGiver?.name || null,
@@ -522,7 +551,13 @@ function MainApp() {
     const doc = new jsPDF();
     doc.text('Relatório de Fretes Financeiro', 14, 15);
     
-    const tableData = freights.map(f => {
+    const filteredFreightsForReport = freights.filter(f => {
+      const matchesStartDate = !reportFilterStartDate || f.date >= reportFilterStartDate;
+      const matchesEndDate = !reportFilterEndDate || f.date <= reportFilterEndDate;
+      return matchesStartDate && matchesEndDate;
+    });
+
+    const tableData = filteredFreightsForReport.map(f => {
       const freightLoadings = loadings.filter(l => l.freightId === f.id);
       const totalLoadedWeight = freightLoadings.reduce((acc, curr) => acc + curr.weight, 0);
       const revenue = freightLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (f.valorFrete || 0)), 0);
@@ -552,9 +587,15 @@ function MainApp() {
 
   const exportLoadingsToPDF = () => {
     const doc = new jsPDF();
-    doc.text('Relatório de Carregamentos Detalhado', 14, 15);
+    doc.text('Relatório de Motoristas Detalhado', 14, 15);
     
-    const tableData = loadings.map(l => {
+    const filteredLoadingsForReport = loadings.filter(l => {
+      const matchesStartDate = !reportFilterStartDate || l.date >= reportFilterStartDate;
+      const matchesEndDate = !reportFilterEndDate || l.date <= reportFilterEndDate;
+      return matchesStartDate && matchesEndDate;
+    });
+
+    const tableData = filteredLoadingsForReport.map(l => {
       const freight = freights.find(f => f.id === l.freightId);
       const revenue = (l.weight / 1000) * (freight?.valorFrete || 0);
       const payout = l.driverValue || (l.weight / 1000) * (freight?.valorPagoMotorista || 0);
@@ -579,7 +620,7 @@ function MainApp() {
       headStyles: { fillColor: [34, 197, 94] }
     });
 
-    doc.save('relatorio_carregamentos_detalhado.pdf');
+    doc.save('relatorio_motoristas_detalhado.pdf');
   };
 
   const exportBillingToPDF = () => {
@@ -604,11 +645,23 @@ function MainApp() {
 
   if (loading) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
 
-  // Summary Data
-  const totalWeight = loadings.reduce((acc, curr) => acc + curr.weight, 0);
-  const openFreights = freights.filter(f => f.status === 'Aberto').length;
-  const pendingManifesto = loadings.filter(l => !l.manifestoDone).length;
-  const totalCompleted = loadings.filter(l => l.unloaded).length;
+  // Summary Data (Filtered for the Dashboard)
+  const dashboardLoadings = loadings.filter(l => {
+    const matchesStartDate = !dashboardFilterStartDate || l.date >= dashboardFilterStartDate;
+    const matchesEndDate = !dashboardFilterEndDate || l.date <= dashboardFilterEndDate;
+    return matchesStartDate && matchesEndDate;
+  });
+
+  const dashboardFreights = freights.filter(f => {
+    const matchesStartDate = !dashboardFilterStartDate || f.date >= dashboardFilterStartDate;
+    const matchesEndDate = !dashboardFilterEndDate || f.date <= dashboardFilterEndDate;
+    return matchesStartDate && matchesEndDate;
+  });
+
+  const totalWeight = dashboardLoadings.reduce((acc, curr) => acc + curr.weight, 0);
+  const openFreights = dashboardFreights.filter(f => f.status === 'Aberto').length;
+  const pendingManifesto = dashboardLoadings.filter(l => !l.manifestoDone).length;
+  const totalCompleted = dashboardLoadings.filter(l => l.unloaded).length;
 
   // Billing Metrics (Filtered for the Billing Dashboard)
   const billingLoadings = loadings.filter(l => {
@@ -634,13 +687,36 @@ function MainApp() {
   const netProfit = totalRevenue - totalDriverPayout;
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+  // Dashboard Billing Metrics (Filtered for the Main Dashboard)
+  const dashboardBillingLoadings = loadings.filter(l => {
+    const matchesStartDate = !dashboardFilterStartDate || l.date >= dashboardFilterStartDate;
+    const matchesEndDate = !dashboardFilterEndDate || l.date <= dashboardFilterEndDate;
+    return matchesStartDate && matchesEndDate;
+  });
+
+  const dashboardTotalRevenue = dashboardBillingLoadings.reduce((acc, curr) => {
+    const freight = freights.find(f => f.id === curr.freightId);
+    const unitPrice = freight?.valorFrete || 0;
+    return acc + ((curr.weight / 1000) * unitPrice);
+  }, 0);
+
+  const dashboardTotalDriverPayout = dashboardBillingLoadings.reduce((acc, curr) => {
+    if (curr.driverValue !== undefined) return acc + curr.driverValue;
+    const freight = freights.find(f => f.id === curr.freightId);
+    const unitPrice = freight?.valorPagoMotorista || 0;
+    return acc + ((curr.weight / 1000) * unitPrice);
+  }, 0);
+
+  const dashboardNetProfit = dashboardTotalRevenue - dashboardTotalDriverPayout;
+  const dashboardProfitMargin = dashboardTotalRevenue > 0 ? (dashboardNetProfit / dashboardTotalRevenue) * 100 : 0;
+
   // Detailed Metrics
-  const totalPlannedWeight = freights.reduce((acc, curr) => acc + curr.totalWeight, 0);
-  const totalUnloadedWeight = loadings.filter(l => l.unloaded).reduce((acc, curr) => acc + curr.weight, 0);
-  const uniqueDrivers = new Set(loadings.map(l => l.driverName)).size;
+  const totalPlannedWeight = dashboardFreights.reduce((acc, curr) => acc + curr.totalWeight, 0);
+  const totalUnloadedWeight = dashboardLoadings.filter(l => l.unloaded).reduce((acc, curr) => acc + curr.weight, 0);
+  const uniqueDrivers = new Set(dashboardLoadings.map(l => l.driverName)).size;
   const avgWeightPerDriver = uniqueDrivers > 0 ? totalWeight / uniqueDrivers : 0;
   
-  const driverStats = loadings.reduce((acc: { name: string, weight: number, count: number }[], curr) => {
+  const driverStats = dashboardLoadings.reduce((acc: { name: string, weight: number, count: number }[], curr) => {
     const existing = acc.find(item => item.name === curr.driverName);
     if (existing) {
       existing.weight += curr.weight;
@@ -653,12 +729,12 @@ function MainApp() {
 
   const topDriver = driverStats[0];
 
-  const driversCarregando = new Set(loadings.map(l => l.driverName)).size;
-  const driversDescarregado = new Set(loadings.filter(l => l.unloaded).map(l => l.driverName)).size;
+  const driversCarregando = new Set(dashboardLoadings.map(l => l.driverName)).size;
+  const driversDescarregado = new Set(dashboardLoadings.filter(l => l.unloaded).map(l => l.driverName)).size;
 
   const funnelData = [
-    { value: totalPlannedWeight, name: 'Planejado', fill: '#27272a', sub: `${freights.length} Fretes` },
-    { value: totalWeight, name: 'Carregado', fill: '#22c55e', sub: `${loadings.length} Viagens (${driversCarregando} Motoristas)` },
+    { value: totalPlannedWeight, name: 'Planejado', fill: '#27272a', sub: `${dashboardFreights.length} Fretes` },
+    { value: totalWeight, name: 'Carregado', fill: '#22c55e', sub: `${dashboardLoadings.length} Viagens (${driversCarregando} Motoristas)` },
     { value: totalUnloadedWeight, name: 'Descarregado', fill: '#3b82f6', sub: `${totalCompleted} Finalizadas (${driversDescarregado} Motoristas)` },
   ];
 
@@ -666,12 +742,12 @@ function MainApp() {
     value: d.weight,
     name: d.name,
     fill: idx === 0 ? '#22c55e' : idx === 1 ? '#16a34a' : idx === 2 ? '#15803d' : idx === 3 ? '#166534' : '#14532d',
-    sub: `${d.count} viagens`
+    sub: totalWeight > 0 ? `${(d.weight / totalWeight * 100).toFixed(1)}% do total` : '0% do total'
   }));
 
   // Freight Performance Data
-  const freightPerformance = freights.map(f => {
-    const loadedWeight = loadings
+  const freightPerformance = dashboardFreights.map(f => {
+    const loadedWeight = dashboardLoadings
       .filter(l => l.freightId === f.id)
       .reduce((acc, curr) => acc + curr.weight, 0);
     return { name: f.description, weight: loadedWeight };
@@ -681,25 +757,34 @@ function MainApp() {
     value: f.weight,
     name: f.name,
     fill: idx === 0 ? '#3b82f6' : idx === 1 ? '#2563eb' : idx === 2 ? '#1d4ed8' : idx === 3 ? '#1e40af' : '#1e3a8a',
-    sub: `${(f.weight / totalWeight * 100).toFixed(1)}% do total`
+    sub: totalWeight > 0 ? `${(f.weight / totalWeight * 100).toFixed(1)}% do total` : '0% do total'
   }));
 
   const filteredFreights = freights.filter(f => {
     const matchesStatus = freightFilterStatus === 'Todos' || f.status === freightFilterStatus;
     const matchesDate = !freightFilterDate || f.date.startsWith(freightFilterDate);
-    return matchesStatus && matchesDate;
+    const matchesSearch = !freightSearch || 
+      f.description.toLowerCase().includes(freightSearch.toLowerCase()) || 
+      f.product.toLowerCase().includes(freightSearch.toLowerCase()) ||
+      f.origin.toLowerCase().includes(freightSearch.toLowerCase()) ||
+      f.destination.toLowerCase().includes(freightSearch.toLowerCase());
+    
+    return matchesStatus && matchesDate && matchesSearch;
   });
 
   const filteredLoadings = loadings.filter(l => {
     const matchesDriver = !loadingFilterDriver || l.driverName.toLowerCase().includes(loadingFilterDriver.toLowerCase());
     const matchesPlate = !loadingFilterPlate || l.plate.toLowerCase().includes(loadingFilterPlate.toLowerCase());
     const matchesDate = !loadingFilterDate || l.date.startsWith(loadingFilterDate);
+    const matchesManifestDate = !loadingFilterManifestDate || (l.manifestoDate && l.manifestoDate.startsWith(loadingFilterManifestDate));
+    const matchesUnloadDate = !loadingFilterUnloadDate || (l.unloadedDate && l.unloadedDate.startsWith(loadingFilterUnloadDate));
+    const matchesFreight = !loadingFilterFreightId || l.freightId === loadingFilterFreightId;
     let matchesStatus = true;
     if (loadingFilterStatus === 'Manifesto') matchesStatus = l.manifestoDone;
     else if (loadingFilterStatus === 'Descarregado') matchesStatus = l.unloaded;
     else if (loadingFilterStatus === 'Pendente') matchesStatus = !l.manifestoDone || !l.unloaded;
     
-    return matchesDriver && matchesPlate && matchesDate && matchesStatus;
+    return matchesDriver && matchesPlate && matchesDate && matchesManifestDate && matchesUnloadDate && matchesStatus && matchesFreight;
   });
 
   return (
@@ -725,7 +810,7 @@ function MainApp() {
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} darkMode={darkMode} />
           <SidebarItem icon={DollarSign} label="Faturamento" active={activeTab === 'faturamento'} onClick={() => setActiveTab('faturamento')} darkMode={darkMode} />
           <SidebarItem icon={ClipboardList} label="Novo Frete" active={activeTab === 'freights'} onClick={() => setActiveTab('freights')} darkMode={darkMode} />
-          <SidebarItem icon={Plus} label="Cadastrar Motorista" active={activeTab === 'loadings'} onClick={() => setActiveTab('loadings')} darkMode={darkMode} />
+          <SidebarItem icon={Truck} label="Motorista" active={activeTab === 'loadings'} onClick={() => setActiveTab('loadings')} darkMode={darkMode} />
           <SidebarItem icon={Users} label="Funcionários" active={activeTab === 'employees'} onClick={() => setActiveTab('employees')} darkMode={darkMode} />
           <SidebarItem icon={FileText} label="Relatórios" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} darkMode={darkMode} />
         </nav>
@@ -740,18 +825,32 @@ function MainApp() {
       <main className="flex-1 p-6 md:p-10 space-y-10 overflow-y-auto">
         {activeTab === 'faturamento' && (
           <div className="space-y-10">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} text-2xl font-black flex items-center gap-3`}>
                 <DollarSign className="w-8 h-8 text-green-500" /> Dashboard de Faturamento
               </h2>
+              <button 
+                onClick={exportBillingToPDF}
+                className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-2xl font-bold hover:bg-green-500 transition-all shadow-lg shadow-green-900/20"
+              >
+                <Download className="w-4 h-4" /> Exportar PDF
+              </button>
+            </div>
+
+            <div className={`${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'} border p-5 rounded-3xl flex flex-wrap items-end gap-4 shadow-sm`}>
+              <div className="flex items-center gap-2 mr-2 mb-8">
+                <Filter className="w-4 h-4 text-zinc-400" />
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros de Faturamento</span>
+              </div>
               
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Filtrar por Pedido (Frete)</label>
+              <div className="flex flex-col gap-1.5 flex-1 min-w-[240px]">
+                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Pedido (Frete)</label>
+                <div className="relative">
+                  <Package className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
                   <select 
                     value={billingFilterFreightId}
                     onChange={(e) => setBillingFilterFreightId(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50 w-full md:w-64`}
+                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50 appearance-none`}
                   >
                     <option value="">Todos os Pedidos</option>
                     {freights.map(f => (
@@ -759,31 +858,41 @@ function MainApp() {
                     ))}
                   </select>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Início</label>
-                  <input 
-                    type="date"
-                    value={billingFilterStartDate}
-                    onChange={(e) => setBillingFilterStartDate(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50`}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Fim</label>
-                  <input 
-                    type="date"
-                    value={billingFilterEndDate}
-                    onChange={(e) => setBillingFilterEndDate(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50`}
-                  />
-                </div>
-                <button 
-                  onClick={exportBillingToPDF}
-                  className="mt-auto flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-500 transition-all shadow-lg shadow-green-900/20 h-[38px]"
-                >
-                  <Download className="w-4 h-4" /> Exportar PDF
-                </button>
               </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Início</label>
+                <input 
+                  type="date"
+                  value={billingFilterStartDate}
+                  onChange={(e) => setBillingFilterStartDate(e.target.value)}
+                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Fim</label>
+                <input 
+                  type="date"
+                  value={billingFilterEndDate}
+                  onChange={(e) => setBillingFilterEndDate(e.target.value)}
+                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                />
+              </div>
+
+              {(billingFilterFreightId || billingFilterStartDate || billingFilterEndDate) && (
+                <button 
+                  onClick={() => {
+                    setBillingFilterFreightId('');
+                    setBillingFilterStartDate('');
+                    setBillingFilterEndDate('');
+                  }}
+                  className={`mb-1 p-2.5 rounded-xl ${darkMode ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-zinc-400 hover:text-zinc-900'} border ${darkMode ? 'border-zinc-700' : 'border-zinc-200'} transition-colors`}
+                  title="Limpar Filtros"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -841,34 +950,36 @@ function MainApp() {
                 <h3 className={`${darkMode ? 'text-white' : 'text-black'} font-black mb-6`}>Top 5 Fretes por Receita</h3>
                 <div className="space-y-4">
                   {freights
-                    .sort((a, b) => {
-                      const aLoadings = loadings.filter(l => l.freightId === a.id);
-                      const bLoadings = loadings.filter(l => l.freightId === b.id);
-                      const aRev = aLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (a.valorFrete || 0)), 0);
-                      const bRev = bLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (b.valorFrete || 0)), 0);
-                      return bRev - aRev;
-                    })
-                    .slice(0, 5)
-                    .map((f, idx) => {
-                      const fLoadings = loadings.filter(l => l.freightId === f.id);
+                    .filter(f => !billingFilterFreightId || f.id === billingFilterFreightId)
+                    .map(f => {
+                      const fLoadings = billingLoadings.filter(l => l.freightId === f.id);
                       const rev = fLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (f.valorFrete || 0)), 0);
-                      return (
-                        <div key={f.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs">
-                              #{idx + 1}
-                            </div>
-                            <div>
-                              <div className={`text-sm font-black ${darkMode ? 'text-white' : 'text-black'}`}>{f.description}</div>
-                              <div className={`text-[10px] font-bold ${darkMode ? 'text-zinc-400' : 'text-black'}`}>{f.product}</div>
-                            </div>
+                      return { ...f, rev };
+                    })
+                    .filter(f => f.rev > 0)
+                    .sort((a, b) => b.rev - a.rev)
+                    .slice(0, 5)
+                    .map((f, idx) => (
+                      <div key={f.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs">
+                            #{idx + 1}
                           </div>
-                          <div className={`text-sm font-black ${darkMode ? 'text-green-500' : 'text-black'}`}>
-                            R$ {rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          <div>
+                            <div className={`text-sm font-black ${darkMode ? 'text-white' : 'text-black'}`}>{f.description}</div>
+                            <div className={`text-[10px] font-bold ${darkMode ? 'text-zinc-400' : 'text-black'}`}>{f.product}</div>
                           </div>
                         </div>
-                      );
-                    })}
+                        <div className={`text-sm font-black ${darkMode ? 'text-green-500' : 'text-black'}`}>
+                          R$ {f.rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    ))}
+                  {freights.filter(f => !billingFilterFreightId || f.id === billingFilterFreightId).length === 0 && (
+                    <div className="text-center py-10">
+                      <p className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Nenhum dado para exibir.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -969,7 +1080,48 @@ function MainApp() {
         )}
 
         {activeTab === 'dashboard' && (
-          <>
+          <div className="space-y-10">
+            {/* Dashboard Filters */}
+            <div className={`flex flex-wrap items-end gap-4 p-6 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl shadow-sm transition-colors`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Filter className="w-4 h-4 text-zinc-400" />
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros Gerais</span>
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Início</label>
+                <input 
+                  type="date"
+                  value={dashboardFilterStartDate}
+                  onChange={(e) => setDashboardFilterStartDate(e.target.value)}
+                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Fim</label>
+                <input 
+                  type="date"
+                  value={dashboardFilterEndDate}
+                  onChange={(e) => setDashboardFilterEndDate(e.target.value)}
+                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                />
+              </div>
+
+              {(dashboardFilterStartDate || dashboardFilterEndDate) && (
+                <button 
+                  onClick={() => {
+                    setDashboardFilterStartDate('');
+                    setDashboardFilterEndDate('');
+                  }}
+                  className={`mb-1 p-2.5 rounded-xl ${darkMode ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-zinc-400 hover:text-zinc-900'} border ${darkMode ? 'border-zinc-700' : 'border-zinc-200'} transition-colors`}
+                  title="Limpar Filtros"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
             {/* Summary */}
             <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <SummaryCard label="Peso Total" value={`${totalWeight.toLocaleString()} kg`} color="text-green-600" darkMode={darkMode} />
@@ -980,10 +1132,10 @@ function MainApp() {
 
             {/* Faturamento */}
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <SummaryCard label="Total Recebido (Empresa)" value={`R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-green-600" darkMode={darkMode} />
-              <SummaryCard label="Total Pago (Motoristas)" value={`R$ ${totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-red-500" darkMode={darkMode} />
-              <SummaryCard label="Lucro Líquido" value={`R$ ${netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-blue-600" darkMode={darkMode} />
-              <SummaryCard label="Margem de Lucro" value={`${profitMargin.toFixed(1)}%`} color={profitMargin > 0 ? "text-emerald-500" : "text-red-500"} darkMode={darkMode} />
+              <SummaryCard label="Total Recebido (Empresa)" value={`R$ ${dashboardTotalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-green-600" darkMode={darkMode} />
+              <SummaryCard label="Total Pago (Motoristas)" value={`R$ ${dashboardTotalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-red-500" darkMode={darkMode} />
+              <SummaryCard label="Lucro Líquido" value={`R$ ${dashboardNetProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-blue-600" darkMode={darkMode} />
+              <SummaryCard label="Margem de Lucro" value={`${dashboardProfitMargin.toFixed(1)}%`} color={dashboardProfitMargin > 0 ? "text-emerald-500" : "text-red-500"} darkMode={darkMode} />
             </section>
 
             {/* Performance Dashboard */}
@@ -1229,7 +1381,7 @@ function MainApp() {
                 </div>
               </section>
             )}
-          </>
+          </div>
         )}
 
         {activeTab === 'freights' && (
@@ -1340,29 +1492,69 @@ function MainApp() {
             </section>
 
             {/* Freights List */}
-            <section className="space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
-                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
-                  <TrendingUp className="w-5 h-5 text-blue-500" /> Fretes em Andamento
-                </h2>
-                
-                <div className="flex items-center gap-3">
+            <section className="space-y-6">
+              <div className={`${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'} border p-5 rounded-3xl flex flex-wrap items-end gap-4 shadow-sm`}>
+                <div className="flex items-center gap-2 mr-2 mb-8">
+                  <Filter className="w-4 h-4 text-zinc-400" />
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros de Frete</span>
+                </div>
+
+                <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Buscar</label>
+                  <div className="relative">
+                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                    <input 
+                      type="text"
+                      placeholder="Descrição, produto, origem..."
+                      value={freightSearch}
+                      onChange={(e) => setFreightSearch(e.target.value)}
+                      className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5 min-w-[140px]">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Status</label>
                   <select 
                     value={freightFilterStatus}
                     onChange={(e) => setFreightFilterStatus(e.target.value as any)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none`}
                   >
                     <option value="Todos">Todos Status</option>
                     <option value="Aberto">Aberto</option>
                     <option value="Finalizado">Finalizado</option>
                   </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data do Frete</label>
                   <input 
                     type="date"
                     value={freightFilterDate}
                     onChange={(e) => setFreightFilterDate(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50`}
                   />
                 </div>
+
+                {(freightFilterStatus !== 'Todos' || freightFilterDate || freightSearch) && (
+                  <button 
+                    onClick={() => {
+                      setFreightFilterStatus('Todos');
+                      setFreightFilterDate('');
+                      setFreightSearch('');
+                    }}
+                    className={`mb-1 p-2.5 rounded-xl ${darkMode ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-zinc-400 hover:text-zinc-900'} border ${darkMode ? 'border-zinc-700' : 'border-zinc-200'} transition-colors`}
+                    title="Limpar Filtros"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between px-2">
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
+                  <TrendingUp className="w-5 h-5 text-blue-500" /> Fretes em Andamento
+                </h2>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1574,10 +1766,46 @@ function MainApp() {
                     />
                   </div>
                 </div>
-                <div className="md:col-span-2 space-y-2">
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Carregamento</label>
+                  <div className="relative">
+                    <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                    <input 
+                      type="date" 
+                      value={loadingDate}
+                      onChange={(e) => setLoadingDate(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Manifesto</label>
+                  <div className="relative">
+                    <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                    <input 
+                      type="date" 
+                      value={manifestoDate}
+                      onChange={(e) => setManifestoDate(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Descarregamento</label>
+                  <div className="relative">
+                    <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                    <input 
+                      type="date" 
+                      value={unloadedDate}
+                      onChange={(e) => setUnloadedDate(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                </div>
+                <div className="md:col-span-1 space-y-2">
                   <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
                   <textarea 
-                    placeholder="Notas sobre o motorista ou carregamento..."
+                    placeholder="Notas sobre o motorista..."
                     value={loadingObservations}
                     onChange={(e) => setLoadingObservations(e.target.value)}
                     rows={1}
@@ -1596,7 +1824,115 @@ function MainApp() {
             </section>
 
             {/* List Section */}
-            <section className="space-y-4">
+            <section className="space-y-6">
+              <div className={`${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'} border p-5 rounded-3xl flex flex-wrap items-end gap-4 shadow-sm`}>
+                <div className="flex items-center gap-2 mr-2 mb-8">
+                  <Filter className="w-4 h-4 text-zinc-400" />
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros de Motorista</span>
+                </div>
+
+                <div className="flex flex-col gap-1.5 flex-1 min-w-[160px]">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Frete</label>
+                  <select 
+                    value={loadingFilterFreightId}
+                    onChange={(e) => setLoadingFilterFreightId(e.target.value)}
+                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50 appearance-none`}
+                  >
+                    <option value="">Todos Fretes</option>
+                    {freights.map(f => (
+                      <option key={f.id} value={f.id}>{f.description}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5 flex-1 min-w-[160px]">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Motorista</label>
+                  <div className="relative">
+                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                    <input 
+                      type="text"
+                      placeholder="Nome do motorista..."
+                      value={loadingFilterDriver}
+                      onChange={(e) => setLoadingFilterDriver(e.target.value)}
+                      className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5 w-32">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Placa</label>
+                  <input 
+                    type="text"
+                    placeholder="ABC-1234"
+                    value={loadingFilterPlate}
+                    onChange={(e) => setLoadingFilterPlate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5 min-w-[140px]">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Status</label>
+                  <select 
+                    value={loadingFilterStatus}
+                    onChange={(e) => setLoadingFilterStatus(e.target.value as any)}
+                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50 appearance-none`}
+                  >
+                    <option value="Todos">Todos Status</option>
+                    <option value="Manifesto">Manifesto Pronto</option>
+                    <option value="Descarregado">Descarregado</option>
+                    <option value="Pendente">Pendente</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Carregamento</label>
+                  <input 
+                    type="date"
+                    value={loadingFilterDate}
+                    onChange={(e) => setLoadingFilterDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Manifesto</label>
+                  <input 
+                    type="date"
+                    value={loadingFilterManifestDate}
+                    onChange={(e) => setLoadingFilterManifestDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Descarregamento</label>
+                  <input 
+                    type="date"
+                    value={loadingFilterUnloadDate}
+                    onChange={(e) => setLoadingFilterUnloadDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  />
+                </div>
+
+                {(loadingFilterDriver || loadingFilterPlate || loadingFilterStatus !== 'Todos' || loadingFilterDate || loadingFilterManifestDate || loadingFilterUnloadDate || loadingFilterFreightId) && (
+                  <button 
+                    onClick={() => {
+                      setLoadingFilterDriver('');
+                      setLoadingFilterPlate('');
+                      setLoadingFilterStatus('Todos');
+                      setLoadingFilterDate('');
+                      setLoadingFilterManifestDate('');
+                      setLoadingFilterUnloadDate('');
+                      setLoadingFilterFreightId('');
+                    }}
+                    className={`mb-1 p-2.5 rounded-xl ${darkMode ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-zinc-400 hover:text-zinc-900'} border ${darkMode ? 'border-zinc-700' : 'border-zinc-200'} transition-colors`}
+                    title="Limpar Filtros"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
                 <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
                   <LayoutDashboard className="w-5 h-5 text-green-500" /> Motoristas Cadastrados
@@ -1619,36 +1955,6 @@ function MainApp() {
                       {filteredLoadings.reduce((acc, curr) => acc + curr.weight, 0).toLocaleString()} kg
                     </span>
                   </div>
-                  <input 
-                    type="text"
-                    placeholder="Filtrar motorista..."
-                    value={loadingFilterDriver}
-                    onChange={(e) => setLoadingFilterDriver(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50 w-full md:w-40`}
-                  />
-                  <input 
-                    type="text"
-                    placeholder="Filtrar placa..."
-                    value={loadingFilterPlate}
-                    onChange={(e) => setLoadingFilterPlate(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50 w-full md:w-32`}
-                  />
-                  <select 
-                    value={loadingFilterStatus}
-                    onChange={(e) => setLoadingFilterStatus(e.target.value as any)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50`}
-                  >
-                    <option value="Todos">Todos Status</option>
-                    <option value="Manifesto">Manifesto Pronto</option>
-                    <option value="Descarregado">Descarregado</option>
-                    <option value="Pendente">Pendente</option>
-                  </select>
-                  <input 
-                    type="date"
-                    value={loadingFilterDate}
-                    onChange={(e) => setLoadingFilterDate(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/50`}
-                  />
                 </div>
               </div>
               
@@ -1705,6 +2011,33 @@ function MainApp() {
                             className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
                             placeholder="Valor Total (R$)"
                           />
+                          <div className="space-y-1">
+                            <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Carregamento</label>
+                            <input 
+                              type="date" 
+                              value={editLoadingDate}
+                              onChange={(e) => setEditLoadingDate(e.target.value)}
+                              className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Manifesto</label>
+                            <input 
+                              type="date" 
+                              value={editManifestoDate}
+                              onChange={(e) => setEditManifestoDate(e.target.value)}
+                              className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Descarregamento</label>
+                            <input 
+                              type="date" 
+                              value={editUnloadedDate}
+                              onChange={(e) => setEditUnloadedDate(e.target.value)}
+                              className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none`}
+                            />
+                          </div>
                           <textarea 
                             value={editObservations}
                             onChange={(e) => setEditObservations(e.target.value)}
@@ -1732,12 +2065,33 @@ function MainApp() {
                                   </span>
                                 )}
                               </div>
-                              <div className={`flex items-center gap-3 text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mt-1`}>
+                              <div className={`flex flex-wrap items-center gap-3 text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mt-1`}>
                                 <span className={`${darkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} px-2 py-0.5 rounded font-mono`}>{loading.plate}</span>
                                 <span>•</span>
                                 <span>{loading.weight.toLocaleString()} kg</span>
                                 <span>•</span>
-                                <span>{format(parseISO(loading.date), 'dd/MM HH:mm')}</span>
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  Carregado: {loading.date ? format(parseISO(loading.date), 'dd/MM/yy') : '-'}
+                                </span>
+                                {loading.manifestoDate && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="flex items-center gap-1">
+                                      <FileText className="w-3 h-3" />
+                                      Manifesto: {format(parseISO(loading.manifestoDate), 'dd/MM/yy')}
+                                    </span>
+                                  </>
+                                )}
+                                {loading.unloadedDate && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="flex items-center gap-1">
+                                      <Truck className="w-3 h-3" />
+                                      Desc.: {format(parseISO(loading.unloadedDate), 'dd/MM/yy')}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                               <div className={`flex items-center gap-3 text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mt-1`}>
                                 {loading.orderGiverName && (
@@ -1866,9 +2220,23 @@ function MainApp() {
             </section>
 
             <section className="space-y-4">
-              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold px-2`}>Funcionários Ativos</h2>
+              <div className="flex items-center justify-between px-2">
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>Funcionários Ativos</h2>
+                <div className="relative w-64">
+                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                  <input 
+                    type="text"
+                    placeholder="Buscar funcionário..."
+                    value={employeeSearch}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                  />
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {employees.map(emp => (
+                {employees
+                  .filter(emp => emp.name.toLowerCase().includes(employeeSearch.toLowerCase()) || emp.role.toLowerCase().includes(employeeSearch.toLowerCase()))
+                  .map(emp => (
                   <div key={emp.id} className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-6 rounded-3xl flex items-center justify-between shadow-sm transition-colors`}>
                     <div>
                       <h3 className={`font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{emp.name}</h3>
@@ -1893,7 +2261,49 @@ function MainApp() {
         )}
 
         {activeTab === 'reports' && (
-          <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 space-y-6 shadow-sm transition-colors`}>
+          <div className="space-y-10">
+            {/* Report Filters */}
+            <div className={`flex flex-wrap items-end gap-4 p-6 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl shadow-sm transition-colors`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Filter className="w-4 h-4 text-zinc-400" />
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros de Relatório</span>
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Início</label>
+                <input 
+                  type="date"
+                  value={reportFilterStartDate}
+                  onChange={(e) => setReportFilterStartDate(e.target.value)}
+                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Fim</label>
+                <input 
+                  type="date"
+                  value={reportFilterEndDate}
+                  onChange={(e) => setReportFilterEndDate(e.target.value)}
+                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                />
+              </div>
+
+              {(reportFilterStartDate || reportFilterEndDate) && (
+                <button 
+                  onClick={() => {
+                    setReportFilterStartDate('');
+                    setReportFilterEndDate('');
+                  }}
+                  className={`mb-1 p-2.5 rounded-xl ${darkMode ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-zinc-400 hover:text-zinc-900'} border ${darkMode ? 'border-zinc-700' : 'border-zinc-200'} transition-colors`}
+                  title="Limpar Filtros"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 space-y-6 shadow-sm transition-colors`}>
             <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
               <Download className="w-5 h-5 text-green-500" /> Exportar Relatórios
             </h2>
@@ -1902,7 +2312,11 @@ function MainApp() {
                 <h3 className={`text-sm font-bold ${darkMode ? 'text-zinc-400' : 'text-zinc-500'} ml-2`}>Exportar CSV</h3>
                 <div className="grid grid-cols-1 gap-4">
                   <button 
-                    onClick={() => exportToCSV(freights, 'relatorio_fretes')}
+                    onClick={() => exportToCSV(freights.filter(f => {
+                      const matchesStartDate = !reportFilterStartDate || f.date >= reportFilterStartDate;
+                      const matchesEndDate = !reportFilterEndDate || f.date <= reportFilterEndDate;
+                      return matchesStartDate && matchesEndDate;
+                    }), 'relatorio_fretes')}
                     className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-blue-500/50' : 'bg-white border-zinc-200 hover:border-blue-500/50'} rounded-2xl transition-all group shadow-sm`}
                   >
                     <div className="flex items-center gap-4">
@@ -1918,7 +2332,11 @@ function MainApp() {
                   </button>
 
                   <button 
-                    onClick={() => exportToCSV(loadings, 'relatorio_carregamentos')}
+                    onClick={() => exportToCSV(loadings.filter(l => {
+                      const matchesStartDate = !reportFilterStartDate || l.date >= reportFilterStartDate;
+                      const matchesEndDate = !reportFilterEndDate || l.date <= reportFilterEndDate;
+                      return matchesStartDate && matchesEndDate;
+                    }), 'relatorio_carregamentos')}
                     className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-green-500/50' : 'bg-white border-zinc-200 hover:border-green-500/50'} rounded-2xl transition-all group shadow-sm`}
                   >
                     <div className="flex items-center gap-4">
@@ -1973,10 +2391,9 @@ function MainApp() {
               </div>
             </div>
           </section>
-        )}
-
-        {/* Performance Dashboard removed from here and moved to dashboard tab */}
-      </main>
+        </div>
+      )}
+    </main>
 
         {/* Modal de Detalhes do Frete */}
         {viewingFreightId && (
@@ -2292,8 +2709,8 @@ function MainApp() {
             
             <p className={`${darkMode ? 'text-zinc-400' : 'text-zinc-500'} leading-relaxed`}>
               {deletingType === 'freight' 
-                ? "Tem certeza que deseja excluir este frete? Todos os carregamentos vinculados perderão a referência."
-                : "Tem certeza que deseja excluir este registro de carregamento?"}
+                ? "Tem certeza que deseja excluir este frete? Todos os registros de motoristas vinculados perderão a referência."
+                : "Tem certeza que deseja excluir este registro de motorista?"}
             </p>
 
             <div className="flex gap-3 pt-2">

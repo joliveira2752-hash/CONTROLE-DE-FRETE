@@ -28,7 +28,9 @@ export interface Loading {
   weight: number;
   manifestoDone: boolean;
   unloaded: boolean;
-  date: string;
+  date: string; // Data de Carregamento
+  manifestoDate?: string;
+  unloadedDate?: string;
   observations?: string;
   orderGiverId?: string;
   orderGiverName?: string;
