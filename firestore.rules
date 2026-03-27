@@ -43,24 +43,24 @@ service cloud.firestore {
     // Freights
     match /freights/{freightId} {
       allow read: if isMaster() || isBranchUser(resource.data.branchId);
-      allow write: if isMaster() || isBranchAdmin(request.resource.data.branchId);
       allow create: if isMaster() || isBranchAdmin(request.resource.data.branchId);
+      allow update: if isMaster() || isBranchAdmin(resource.data.branchId);
       allow delete: if isMaster() || isBranchAdmin(resource.data.branchId);
     }
 
     // Loadings
     match /loadings/{loadingId} {
       allow read: if isMaster() || isBranchUser(resource.data.branchId);
-      allow write: if isMaster() || isBranchUser(request.resource.data.branchId);
-      allow create: if isMaster() || isBranchUser(request.resource.data.branchId);
+      allow create: if isMaster() || isBranchAdmin(request.resource.data.branchId);
+      allow update: if isMaster() || isBranchAdmin(resource.data.branchId);
       allow delete: if isMaster() || isBranchAdmin(resource.data.branchId);
     }
 
     // Employees
     match /employees/{employeeId} {
       allow read: if isMaster() || isBranchUser(resource.data.branchId);
-      allow write: if isMaster() || isBranchAdmin(request.resource.data.branchId);
       allow create: if isMaster() || isBranchAdmin(request.resource.data.branchId);
+      allow update: if isMaster() || isBranchAdmin(resource.data.branchId);
       allow delete: if isMaster() || isBranchAdmin(resource.data.branchId);
     }
   }

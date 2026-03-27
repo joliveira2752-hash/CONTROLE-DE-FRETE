@@ -169,6 +169,8 @@ function MainApp() {
   const [isSubmittingLoading, setIsSubmittingLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingType, setDeletingType] = useState<'loading' | 'freight' | null>(null);
+  const [transferringLoadingId, setTransferringLoadingId] = useState<string | null>(null);
+  const [transferNewFreightId, setTransferNewFreightId] = useState<string>('');
   const [viewingFreightId, setViewingFreightId] = useState<string | null>(null);
   
   // Edit State
@@ -566,12 +568,46 @@ function MainApp() {
 
   const toggleStatus = async (id: string, field: 'manifestoDone' | 'unloaded', value: boolean) => {
     const path = `loadings/${id}`;
+    const now = new Date().toISOString().split('T')[0];
     try {
-      await updateDoc(doc(db, 'loadings', id), {
-        [field]: !value
-      });
+      const updates: any = { [field]: !value };
+      if (field === 'manifestoDone' && !value) {
+        updates.manifestoDate = now;
+      } else if (field === 'unloaded' && !value) {
+        updates.unloadedDate = now;
+      }
+      await updateDoc(doc(db, 'loadings', id), updates);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (userProfile?.role !== 'master') return;
+    if (userId === user?.uid) {
+      alert("Você não pode excluir seu próprio usuário master!");
+      return;
+    }
+    if (!window.confirm("Tem certeza que deseja excluir este usuário?")) return;
+    
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+    }
+  };
+
+  const handleTransferLoading = async (loadingId: string, newFreightId: string) => {
+    try {
+      const freight = freights.find(f => f.id === newFreightId);
+      if (!freight) return;
+
+      await updateDoc(doc(db, 'loadings', loadingId), {
+        freightId: newFreightId,
+        branchId: freight.branchId
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `loadings/${loadingId}`);
     }
   };
 
@@ -848,20 +884,48 @@ function MainApp() {
   if (user && !userProfile) {
     return (
       <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center space-y-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center space-y-6">
           <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto text-amber-600">
-            <X className="w-8 h-8" />
+            <Activity className="w-8 h-8" />
           </div>
-          <h2 className="text-2xl font-bold text-zinc-900">Acesso Restrito</h2>
-          <p className="text-zinc-500">Seu usuário não possui um perfil vinculado a nenhuma filial. Entre em contato com o administrador master.</p>
-          <button onClick={handleLogout} className="text-zinc-500 hover:text-zinc-900 font-medium">Sair</button>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-zinc-900">Solicitar Acesso</h2>
+            <p className="text-zinc-500">Seu usuário ainda não possui um perfil. Escolha sua filial para solicitar acesso ao administrador master.</p>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="text-left">
+              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Sua Filial</label>
+              <select 
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                onChange={(e) => {
+                  // This is just a UI placeholder for now, the Master still needs to create the user
+                  // But we can show a message
+                  alert("Solicitação enviada! Entre em contato com o administrador master para aprovação.");
+                }}
+              >
+                <option value="">Selecione uma filial...</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="pt-4 border-t border-zinc-100 flex flex-col gap-3">
+              <p className="text-[10px] text-zinc-400">E-mail logado: <span className="font-bold">{user.email}</span></p>
+              <button onClick={handleLogout} className="text-zinc-500 hover:text-zinc-900 font-bold text-sm">Sair e tentar outro e-mail</button>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   const dashboardLoadings = loadings.filter(l => {
-    const dateToCompare = l.manifestoDate || '';
+    // If no date filter, show all
+    if (!dashboardFilterStartDate && !dashboardFilterEndDate) return true;
+    
+    const dateToCompare = l.manifestoDate || l.date; // Fallback to loading date if not manifested
     const matchesStartDate = !dashboardFilterStartDate || dateToCompare >= dashboardFilterStartDate;
     const matchesEndDate = !dashboardFilterEndDate || dateToCompare <= dashboardFilterEndDate;
     return matchesStartDate && matchesEndDate;
@@ -894,7 +958,7 @@ function MainApp() {
   // Billing Metrics (Filtered for the Billing Dashboard)
   const billingLoadings = loadings.filter(l => {
     const matchesFreight = !billingFilterFreightId || l.freightId === billingFilterFreightId;
-    const dateToCompare = l.manifestoDate || '';
+    const dateToCompare = l.manifestoDate || l.date;
     const matchesStartDate = !billingFilterStartDate || dateToCompare >= billingFilterStartDate;
     const matchesEndDate = !billingFilterEndDate || dateToCompare <= billingFilterEndDate;
     return matchesFreight && matchesStartDate && matchesEndDate;
@@ -918,7 +982,8 @@ function MainApp() {
 
   // Dashboard Billing Metrics (Filtered for the Main Dashboard)
   const dashboardBillingLoadings = loadings.filter(l => {
-    const dateToCompare = l.manifestoDate || '';
+    if (!dashboardFilterStartDate && !dashboardFilterEndDate) return true;
+    const dateToCompare = l.manifestoDate || l.date;
     const matchesStartDate = !dashboardFilterStartDate || dateToCompare >= dashboardFilterStartDate;
     const matchesEndDate = !dashboardFilterEndDate || dateToCompare <= dashboardFilterEndDate;
     return matchesStartDate && matchesEndDate;
@@ -1202,9 +1267,20 @@ function MainApp() {
                           <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{u.name}</p>
                           <p className="text-[10px] text-zinc-500">{u.email}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{u.role}</p>
-                          <p className="text-[9px] text-zinc-400">{branches.find(b => b.id === u.branchId)?.name || 'Master'}</p>
+                        <div className="text-right flex items-center gap-3">
+                          <div>
+                            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{u.role}</p>
+                            <p className="text-[9px] text-zinc-400">{branches.find(b => b.id === u.branchId)?.name || 'Master'}</p>
+                          </div>
+                          {u.role !== 'master' && (
+                            <button 
+                              onClick={() => handleDeleteUser(u.id)}
+                              className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
+                              title="Excluir Usuário"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1525,6 +1601,47 @@ function MainApp() {
               <SummaryCard label="Finalizados" value={totalCompleted.toString()} color={darkMode ? 'text-white' : 'text-zinc-900'} darkMode={darkMode} />
             </section>
 
+            {userProfile?.role === 'master' && !selectedBranchId && (
+              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
+                <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
+                  <Package className="w-5 h-5 text-green-500" /> Resumo por Filial
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {branches.map(branch => {
+                    const branchLoadings = dashboardLoadings.filter(l => l.branchId === branch.id);
+                    const branchWeight = branchLoadings.reduce((acc, curr) => acc + curr.weight, 0);
+                    const branchRevenue = branchLoadings.reduce((acc, curr) => {
+                      const freight = freights.find(f => f.id === curr.freightId);
+                      return acc + ((curr.weight / 1000) * (freight?.valorFrete || 0));
+                    }, 0);
+                    
+                    return (
+                      <div key={branch.id} className={`${darkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-zinc-50 border-zinc-100'} border p-5 rounded-2xl transition-colors`}>
+                        <div className="flex justify-between items-start mb-4">
+                          <h4 className={`font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{branch.name}</h4>
+                          <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Ativa</span>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Peso Total</span>
+                            <span className={`text-xs font-bold ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>{branchWeight.toLocaleString()} kg</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Receita</span>
+                            <span className="text-xs font-bold text-blue-500">R$ {branchRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Viagens</span>
+                            <span className={`text-xs font-bold ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>{branchLoadings.length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
             {/* Faturamento */}
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <SummaryCard label="Total Recebido (Empresa)" value={`R$ ${dashboardTotalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-green-600" darkMode={darkMode} />
@@ -1782,109 +1899,111 @@ function MainApp() {
         {activeTab === 'freights' && (
           <>
             {/* Freight Registration */}
-            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
-              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                <ClipboardList className="w-5 h-5 text-blue-500" /> Novo Frete
-              </h2>
-              <form onSubmit={handleSubmitFreight} className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                <div className="md:col-span-2 space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Descrição</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Soja - Fazenda Sol"
-                    value={freightDesc}
-                    onChange={(e) => setFreightDesc(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Produto</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Soja"
-                    value={freightProduct}
-                    onChange={(e) => setFreightProduct(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Origem</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Sorriso-MT"
-                    value={freightOrigin}
-                    onChange={(e) => setFreightOrigin(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Destino</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Santos-SP"
-                    value={freightDestination}
-                    onChange={(e) => setFreightDestination(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Peso Total (kg)</label>
-                  <input 
-                    type="number" 
-                    placeholder="0"
-                    value={freightTotalWeight}
-                    onChange={(e) => setFreightTotalWeight(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Empresa (R$/ton)</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    placeholder="0.00"
-                    value={freightValorFrete}
-                    onChange={(e) => setFreightValorFrete(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Motorista (R$/ton)</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    placeholder="0.00"
-                    value={freightValorPagoMotorista}
-                    onChange={(e) => setFreightValorPagoMotorista(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Total Estimado (R$)</label>
-                  <div className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400'} border rounded-xl py-3 px-4 text-sm`}>
-                    R$ {((Number(freightTotalWeight) / 1000) * Number(freightValorFrete) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
+              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors mb-10`}>
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
+                  <ClipboardList className="w-5 h-5 text-blue-500" /> Novo Frete
+                </h2>
+                <form onSubmit={handleSubmitFreight} className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                  <div className="md:col-span-2 space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Descrição</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Soja - Fazenda Sol"
+                      value={freightDesc}
+                      onChange={(e) => setFreightDesc(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
                   </div>
-                </div>
-                <div className="md:col-span-6 space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
-                  <textarea 
-                    placeholder="Notas adicionais sobre o frete..."
-                    value={freightObservations}
-                    onChange={(e) => setFreightObservations(e.target.value)}
-                    rows={2}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none`}
-                  />
-                </div>
-                <div className="md:col-span-6 flex justify-end">
-                  <button 
-                    disabled={isSubmittingFreight}
-                    className="w-full md:w-auto px-12 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
-                  >
-                    {isSubmittingFreight ? 'Salvando...' : 'Criar Frete'}
-                  </button>
-                </div>
-              </form>
-            </section>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Produto</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Soja"
+                      value={freightProduct}
+                      onChange={(e) => setFreightProduct(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Origem</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Sorriso-MT"
+                      value={freightOrigin}
+                      onChange={(e) => setFreightOrigin(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Destino</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Santos-SP"
+                      value={freightDestination}
+                      onChange={(e) => setFreightDestination(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Peso Total (kg)</label>
+                    <input 
+                      type="number" 
+                      placeholder="0"
+                      value={freightTotalWeight}
+                      onChange={(e) => setFreightTotalWeight(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Empresa (R$/ton)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      placeholder="0.00"
+                      value={freightValorFrete}
+                      onChange={(e) => setFreightValorFrete(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Motorista (R$/ton)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      placeholder="0.00"
+                      value={freightValorPagoMotorista}
+                      onChange={(e) => setFreightValorPagoMotorista(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Total Estimado (R$)</label>
+                    <div className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400'} border rounded-xl py-3 px-4 text-sm`}>
+                      R$ {((Number(freightTotalWeight) / 1000) * Number(freightValorFrete) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className="md:col-span-6 space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
+                    <textarea 
+                      placeholder="Notas adicionais sobre o frete..."
+                      value={freightObservations}
+                      onChange={(e) => setFreightObservations(e.target.value)}
+                      rows={2}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none`}
+                    />
+                  </div>
+                  <div className="md:col-span-6 flex justify-end">
+                    <button 
+                      disabled={isSubmittingFreight}
+                      className="w-full md:w-auto px-12 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                    >
+                      {isSubmittingFreight ? 'Salvando...' : 'Criar Frete'}
+                    </button>
+                  </div>
+                </form>
+              </section>
+            )}
 
             {/* Freights List */}
             <section className="space-y-6">
@@ -1978,27 +2097,31 @@ function MainApp() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startEditingFreight(f);
-                            }}
-                            className={`${darkMode ? 'text-zinc-700 hover:text-blue-500' : 'text-zinc-300 hover:text-blue-500'} transition-colors p-1`}
-                            title="Editar Frete"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeletingId(f.id);
-                              setDeletingType('freight');
-                            }}
-                            className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors p-1`}
-                            title="Excluir Frete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
+                            <>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startEditingFreight(f);
+                                }}
+                                className={`${darkMode ? 'text-zinc-700 hover:text-blue-500' : 'text-zinc-300 hover:text-blue-500'} transition-colors p-1`}
+                                title="Editar Frete"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeletingId(f.id);
+                                  setDeletingType('freight');
+                                }}
+                                className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors p-1`}
+                                title="Excluir Frete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                       
@@ -2061,162 +2184,164 @@ function MainApp() {
         {activeTab === 'loadings' && (
           <>
             {/* Loading Registration */}
-            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
-              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                <Plus className="w-5 h-5 text-green-500" /> Cadastrar Motorista
-              </h2>
-              <form onSubmit={handleSubmitLoading} className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Selecionar Frete</label>
-                  <select 
-                    value={selectedFreightId}
-                    onChange={(e) => setSelectedFreightId(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none`}
-                  >
-                    <option value="">Selecione...</option>
-                    {freights.filter(f => f.status === 'Aberto').map(f => (
-                      <option key={f.id} value={f.id}>{f.description}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Motorista</label>
-                  <div className="relative">
-                    <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
-                    <input 
-                      type="text" 
-                      placeholder="Nome"
-                      value={driverName}
-                      onChange={(e) => setDriverName(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Placa</label>
-                  <div className="relative">
-                    <Truck className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
-                    <input 
-                      type="text" 
-                      placeholder="ABC-1234"
-                      value={plate}
-                      onChange={(e) => setPlate(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Peso (kg)</label>
-                  <div className="relative">
-                    <Weight className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
-                    <input 
-                      type="number" 
-                      placeholder="0"
-                      value={weight}
-                      onChange={(e) => setWeight(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Quem deu a ordem</label>
-                  <div className="relative">
-                    <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'} z-10`} />
+            {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
+              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
+                  <Plus className="w-5 h-5 text-green-500" /> Cadastrar Motorista
+                </h2>
+                <form onSubmit={handleSubmitLoading} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Selecionar Frete</label>
                     <select 
-                      value={orderGiverId}
-                      onChange={(e) => setOrderGiverId(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none`}
+                      value={selectedFreightId}
+                      onChange={(e) => setSelectedFreightId(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none`}
                     >
                       <option value="">Selecione...</option>
-                      {employees.map(emp => (
-                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      {freights.filter(f => f.status === 'Aberto').map(f => (
+                        <option key={f.id} value={f.id}>{f.description}</option>
                       ))}
                     </select>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Vlr Unit. Motorista (R$/ton)</label>
-                  <div className="relative">
-                    <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      placeholder="0.00"
-                      value={driverUnitPrice}
-                      onChange={(e) => setDriverUnitPrice(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Motorista</label>
+                    <div className="relative">
+                      <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                      <input 
+                        type="text" 
+                        placeholder="Nome"
+                        value={driverName}
+                        onChange={(e) => setDriverName(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Placa</label>
+                    <div className="relative">
+                      <Truck className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                      <input 
+                        type="text" 
+                        placeholder="ABC-1234"
+                        value={plate}
+                        onChange={(e) => setPlate(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Peso (kg)</label>
+                    <div className="relative">
+                      <Weight className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                      <input 
+                        type="number" 
+                        placeholder="0"
+                        value={weight}
+                        onChange={(e) => setWeight(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Quem deu a ordem</label>
+                    <div className="relative">
+                      <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'} z-10`} />
+                      <select 
+                        value={orderGiverId}
+                        onChange={(e) => setOrderGiverId(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none`}
+                      >
+                        <option value="">Selecione...</option>
+                        {employees.map(emp => (
+                          <option key={emp.id} value={emp.id}>{emp.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Vlr Unit. Motorista (R$/ton)</label>
+                    <div className="relative">
+                      <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        placeholder="0.00"
+                        value={driverUnitPrice}
+                        onChange={(e) => setDriverUnitPrice(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Total (R$)</label>
+                    <div className="relative">
+                      <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                      <input 
+                        type="number" 
+                        placeholder="0.00"
+                        value={driverValue}
+                        onChange={(e) => setDriverValue(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Carregamento</label>
+                    <div className="relative">
+                      <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                      <input 
+                        type="date" 
+                        value={loadingDate}
+                        onChange={(e) => setLoadingDate(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Manifesto</label>
+                    <div className="relative">
+                      <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                      <input 
+                        type="date" 
+                        value={manifestoDate}
+                        onChange={(e) => setManifestoDate(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Descarregamento</label>
+                    <div className="relative">
+                      <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
+                      <input 
+                        type="date" 
+                        value={unloadedDate}
+                        onChange={(e) => setUnloadedDate(e.target.value)}
+                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                  <div className="md:col-span-1 space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
+                    <textarea 
+                      placeholder="Notas sobre o motorista..."
+                      value={loadingObservations}
+                      onChange={(e) => setLoadingObservations(e.target.value)}
+                      rows={1}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all resize-none`}
                     />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Total (R$)</label>
-                  <div className="relative">
-                    <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
-                    <input 
-                      type="number" 
-                      placeholder="0.00"
-                      value={driverValue}
-                      onChange={(e) => setDriverValue(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
-                    />
+                  <div className="flex items-end">
+                    <button 
+                      disabled={isSubmittingLoading}
+                      className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-900/20"
+                    >
+                      {isSubmittingLoading ? 'Salvando...' : 'Cadastrar'}
+                    </button>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Carregamento</label>
-                  <div className="relative">
-                    <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
-                    <input 
-                      type="date" 
-                      value={loadingDate}
-                      onChange={(e) => setLoadingDate(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Manifesto</label>
-                  <div className="relative">
-                    <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
-                    <input 
-                      type="date" 
-                      value={manifestoDate}
-                      onChange={(e) => setManifestoDate(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Descarregamento</label>
-                  <div className="relative">
-                    <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
-                    <input 
-                      type="date" 
-                      value={unloadedDate}
-                      onChange={(e) => setUnloadedDate(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
-                    />
-                  </div>
-                </div>
-                <div className="md:col-span-1 space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
-                  <textarea 
-                    placeholder="Notas sobre o motorista..."
-                    value={loadingObservations}
-                    onChange={(e) => setLoadingObservations(e.target.value)}
-                    rows={1}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all resize-none`}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button 
-                    disabled={isSubmittingLoading}
-                    className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-900/20"
-                  >
-                    {isSubmittingLoading ? 'Salvando...' : 'Cadastrar'}
-                  </button>
-                </div>
-              </form>
-            </section>
+                </form>
+              </section>
+            )}
 
             {/* List Section */}
             <section className="space-y-6">
@@ -2531,34 +2656,50 @@ function MainApp() {
                               <StatusButton 
                                 active={loading.manifestoDone} 
                                 label="Manifesto" 
-                                onClick={() => toggleStatus(loading.id, 'manifestoDone', loading.manifestoDone)}
+                                onClick={() => (userProfile?.role === 'admin' || userProfile?.role === 'master') && toggleStatus(loading.id, 'manifestoDone', loading.manifestoDone)}
                                 darkMode={darkMode}
+                                disabled={userProfile?.role === 'user'}
                               />
                               <StatusButton 
                                 active={loading.unloaded} 
                                 label="Descarregado" 
-                                onClick={() => toggleStatus(loading.id, 'unloaded', loading.unloaded)}
+                                onClick={() => (userProfile?.role === 'admin' || userProfile?.role === 'master') && toggleStatus(loading.id, 'unloaded', loading.unloaded)}
                                 darkMode={darkMode}
+                                disabled={userProfile?.role === 'user'}
                               />
                             </div>
                             <div className="flex items-center gap-1">
-                              <button 
-                                onClick={() => startEditing(loading)}
-                                className={`${darkMode ? 'text-zinc-700 hover:text-blue-500' : 'text-zinc-300 hover:text-blue-500'} p-2 transition-colors`}
-                                title="Editar"
-                              >
-                                <FileText className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  setDeletingId(loading.id);
-                                  setDeletingType('loading');
-                                }}
-                                className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} p-2 transition-colors`}
-                                title="Excluir"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
+                                <>
+                                  <button 
+                                    onClick={() => {
+                                      setTransferringLoadingId(loading.id);
+                                      setTransferNewFreightId('');
+                                    }}
+                                    className={`${darkMode ? 'text-zinc-700 hover:text-blue-500' : 'text-zinc-300 hover:text-blue-500'} p-2 transition-colors`}
+                                    title="Transferir para outro frete"
+                                  >
+                                    <ArrowRight className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => startEditing(loading)}
+                                    className={`${darkMode ? 'text-zinc-700 hover:text-blue-500' : 'text-zinc-300 hover:text-blue-500'} p-2 transition-colors`}
+                                    title="Editar"
+                                  >
+                                    <FileText className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      setDeletingId(loading.id);
+                                      setDeletingType('loading');
+                                    }}
+                                    className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} p-2 transition-colors`}
+                                    title="Excluir"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </>
@@ -2578,41 +2719,43 @@ function MainApp() {
 
         {activeTab === 'employees' && (
           <div className="space-y-10">
-            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
-              <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                <Users className="w-5 h-5 text-blue-500" /> Cadastrar Funcionário
-              </h2>
-              <form onSubmit={handleSubmitEmployee} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Nome</label>
-                  <input 
-                    type="text" 
-                    placeholder="Nome completo"
-                    value={employeeName}
-                    onChange={(e) => setEmployeeName(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Cargo/Função</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Expedição, Administrativo"
-                    value={employeeRole}
-                    onChange={(e) => setEmployeeRole(e.target.value)}
-                    className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button 
-                    disabled={isSubmittingEmployee}
-                    className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
-                  >
-                    {isSubmittingEmployee ? 'Salvando...' : 'Cadastrar'}
-                  </button>
-                </div>
-              </form>
-            </section>
+            {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
+              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
+                  <Users className="w-5 h-5 text-blue-500" /> Cadastrar Funcionário
+                </h2>
+                <form onSubmit={handleSubmitEmployee} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Nome</label>
+                    <input 
+                      type="text" 
+                      placeholder="Nome completo"
+                      value={employeeName}
+                      onChange={(e) => setEmployeeName(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Cargo/Função</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Expedição, Administrativo"
+                      value={employeeRole}
+                      onChange={(e) => setEmployeeRole(e.target.value)}
+                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button 
+                      disabled={isSubmittingEmployee}
+                      className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                    >
+                      {isSubmittingEmployee ? 'Salvando...' : 'Cadastrar'}
+                    </button>
+                  </div>
+                </form>
+              </section>
+            )}
 
             <section className="space-y-4">
               <div className="flex items-center justify-between px-2">
@@ -2637,12 +2780,14 @@ function MainApp() {
                       <h3 className={`font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{emp.name}</h3>
                       <p className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>{emp.role}</p>
                     </div>
-                    <button 
-                      onClick={() => deleteEmployee(emp.id)}
-                      className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors`}
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                    {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
+                      <button 
+                        onClick={() => deleteEmployee(emp.id)}
+                        className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors`}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {employees.length === 0 && (
@@ -3091,6 +3236,65 @@ function MainApp() {
           </div>
         )}
 
+      {/* Modal de Transferência de Carregamento */}
+      {transferringLoadingId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
+          <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-8 rounded-3xl max-w-md w-full space-y-6 shadow-2xl transition-colors`}>
+            <div className="flex items-center gap-4 text-blue-500">
+              <div className="p-3 bg-blue-500/10 rounded-2xl">
+                <ArrowRight size={24} />
+              </div>
+              <h3 className="text-xl font-bold">Transferir Carregamento</h3>
+            </div>
+            
+            <div className="space-y-4">
+              <p className={`${darkMode ? 'text-zinc-400' : 'text-zinc-500'} text-sm`}>
+                Selecione o novo frete para o qual deseja transferir este carregamento.
+              </p>
+              
+              <div className="space-y-2">
+                <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Novo Frete</label>
+                <select 
+                  value={transferNewFreightId}
+                  onChange={(e) => setTransferNewFreightId(e.target.value)}
+                  className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/50`}
+                >
+                  <option value="">Selecione um frete...</option>
+                  {freights.filter(f => f.status === 'Aberto').map(f => (
+                    <option key={f.id} value={f.id}>{f.description} - {f.product}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setTransferringLoadingId(null);
+                  setTransferNewFreightId('');
+                }}
+                className={`flex-1 px-6 py-3 ${darkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'} font-bold rounded-2xl transition-all`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (transferNewFreightId) {
+                    handleTransferLoading(transferringLoadingId, transferNewFreightId);
+                    setTransferringLoadingId(null);
+                    setTransferNewFreightId('');
+                  }
+                }}
+                className="flex-1 px-6 py-3 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                disabled={!transferNewFreightId}
+              >
+                Transferir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Confirmação de Exclusão */}
       {deletingId && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
@@ -3147,20 +3351,36 @@ function SummaryCard({ label, value, color, darkMode }: { label: string, value: 
   );
 }
 
-function StatusButton({ active, label, onClick, darkMode }: { active: boolean, label: string, onClick: () => void, darkMode: boolean }) {
+function StatusButton({ active, label, onClick, darkMode, disabled }: { active: boolean, label: string, onClick: () => void, darkMode: boolean, disabled?: boolean }) {
+  const content = (
+    <>
+      {active ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+      {label}
+    </>
+  );
+
+  const className = `flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+    active 
+      ? 'bg-green-500/10 border-green-500/30 text-green-600' 
+      : darkMode 
+        ? 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-600'
+        : 'bg-zinc-50 border-zinc-200 text-zinc-400 hover:border-zinc-300'
+  } ${disabled ? 'cursor-default opacity-80' : 'hover:scale-105 active:scale-95 cursor-pointer'}`;
+
+  if (disabled) {
+    return (
+      <div className={className}>
+        {content}
+      </div>
+    );
+  }
+
   return (
     <button 
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-        active 
-          ? 'bg-green-500/10 border-green-500/30 text-green-600' 
-          : darkMode 
-            ? 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-600'
-            : 'bg-zinc-50 border-zinc-200 text-zinc-400 hover:border-zinc-300'
-      }`}
+      className={className}
     >
-      {active ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-      {label}
+      {content}
     </button>
   );
 }
