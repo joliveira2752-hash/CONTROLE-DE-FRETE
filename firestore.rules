@@ -36,8 +36,16 @@ service cloud.firestore {
     // Users
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isMaster());
-      allow write: if isMaster() || (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'branchId']));
-      allow create: if isMaster() || (request.auth.uid == userId && request.resource.data.role == 'user');
+      allow create: if isMaster() || (
+        request.auth.uid == userId && 
+        request.resource.data.role == 'user' && 
+        request.resource.data.approved == false
+      );
+      allow update: if isMaster() || (
+        request.auth.uid == userId && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'branchId', 'approved'])
+      );
+      allow delete: if isMaster();
     }
 
     // Freights

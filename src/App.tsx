@@ -251,6 +251,7 @@ function MainApp() {
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [dashboardFilterStartDate, setDashboardFilterStartDate] = useState('');
   const [dashboardFilterEndDate, setDashboardFilterEndDate] = useState('');
+  const [requestBranchId, setRequestBranchId] = useState('');
   const [reportFilterStartDate, setReportFilterStartDate] = useState('');
   const [reportFilterEndDate, setReportFilterEndDate] = useState('');
   const [freightSearch, setFreightSearch] = useState('');
@@ -285,7 +286,8 @@ function MainApp() {
                   id: currentUser.uid,
                   email: currentUser.email!,
                   role: 'master',
-                  name: currentUser.displayName || 'Master Admin'
+                  name: currentUser.displayName || 'Master Admin',
+                  approved: true
                 };
                 await setDoc(doc(db, 'users', currentUser.uid), masterProfile);
                 setUserProfile(masterProfile);
@@ -408,19 +410,13 @@ function MainApp() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserEmail || !newUserName || !newUserBranchId || userProfile?.role !== 'master') return;
-    // Note: This only creates the profile. The user still needs to authenticate.
-    // In a real app, you'd use a Cloud Function to create the Auth user too.
     try {
-      // We use a random ID or the email as ID if we want to pre-provision
-      // But usually we'd wait for them to sign up.
-      // For this demo, we'll just add it to 'users' collection.
-      // We'll need a way to link it when they first log in.
-      // A better way is to use the email as the document ID or a field.
       await addDoc(collection(db, 'users'), {
         email: newUserEmail.toLowerCase(),
         name: newUserName,
         role: newUserRole,
         branchId: newUserBranchId,
+        approved: true,
         createdAt: new Date().toISOString()
       });
       setNewUserEmail('');
@@ -428,6 +424,42 @@ function MainApp() {
       setNewUserBranchId('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'users');
+    }
+  };
+
+  const handleRequestAccess = async (branchId: string) => {
+    if (!user || !branchId) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        email: user.email?.toLowerCase(),
+        name: user.displayName || 'Usuário Solicitante',
+        role: 'user',
+        branchId: branchId,
+        approved: false,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'users');
+    }
+  };
+
+  const handleApproveUser = async (userId: string) => {
+    if (userProfile?.role !== 'master') return;
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        approved: true
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'users');
+    }
+  };
+
+  const handleRejectUser = async (userId: string) => {
+    if (userProfile?.role !== 'master') return;
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'users');
     }
   };
 
@@ -892,40 +924,57 @@ function MainApp() {
     );
   }
 
-  if (user && !userProfile) {
+  if (user && (!userProfile || !userProfile.approved)) {
     return (
       <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center space-y-6">
-          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto text-amber-600">
-            <Activity className="w-8 h-8" />
+          <div className={`w-16 h-16 ${userProfile ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'} rounded-2xl flex items-center justify-center mx-auto`}>
+            {userProfile ? <ClipboardList className="w-8 h-8" /> : <Activity className="w-8 h-8" />}
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-zinc-900">Solicitar Acesso</h2>
-            <p className="text-zinc-500">Seu usuário ainda não possui um perfil. Escolha sua filial para solicitar acesso ao administrador master.</p>
+            <h2 className="text-2xl font-bold text-zinc-900">
+              {userProfile ? 'Aguardando Aprovação' : 'Solicitar Acesso'}
+            </h2>
+            <p className="text-zinc-500">
+              {userProfile 
+                ? 'Sua solicitação foi enviada. Aguarde o administrador master autorizar seu acesso.' 
+                : 'Seu usuário ainda não possui um perfil. Escolha sua filial para solicitar acesso ao administrador master.'}
+            </p>
           </div>
           
-          <div className="space-y-4">
-            <div className="text-left">
-              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Sua Filial</label>
-              <select 
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
-                onChange={(e) => {
-                  // This is just a UI placeholder for now, the Master still needs to create the user
-                  // But we can show a message
-                  alert("Solicitação enviada! Entre em contato com o administrador master para aprovação.");
-                }}
+          {!userProfile && (
+            <div className="space-y-4">
+              <div className="text-left">
+                <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Sua Filial</label>
+                <select 
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                  value={requestBranchId}
+                  onChange={(e) => setRequestBranchId(e.target.value)}
+                >
+                  <option value="">Selecione uma filial...</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button 
+                onClick={() => handleRequestAccess(requestBranchId)}
+                disabled={!requestBranchId}
+                className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-green-900/20"
               >
-                <option value="">Selecione uma filial...</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
+                Solicitar Acesso
+              </button>
             </div>
-            
-            <div className="pt-4 border-t border-zinc-100 flex flex-col gap-3">
-              <p className="text-[10px] text-zinc-400">E-mail logado: <span className="font-bold">{user.email}</span></p>
-              <button onClick={handleLogout} className="text-zinc-500 hover:text-zinc-900 font-bold text-sm">Sair e tentar outro e-mail</button>
-            </div>
+          )}
+          
+          <div className="pt-4 border-t border-zinc-100 flex flex-col gap-3">
+            <p className="text-[10px] text-zinc-400">E-mail logado: <span className="font-bold">{user.email}</span></p>
+            {userProfile && (
+              <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest">
+                Filial solicitada: {branches.find(b => b.id === userProfile.branchId)?.name}
+              </p>
+            )}
+            <button onClick={handleLogout} className="text-zinc-500 hover:text-zinc-900 font-bold text-sm">Sair e tentar outro e-mail</button>
           </div>
         </div>
       </div>
@@ -1269,32 +1318,69 @@ function MainApp() {
                   </button>
                 </form>
 
-                <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
-                  <h4 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-4`}>Usuários Cadastrados</h4>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {allUsers.map(u => (
-                      <div key={u.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-zinc-950' : 'bg-zinc-50'}`}>
-                        <div>
-                          <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{u.name}</p>
-                          <p className="text-[10px] text-zinc-500">{u.email}</p>
-                        </div>
-                        <div className="text-right flex items-center gap-3">
-                          <div>
-                            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{u.role}</p>
-                            <p className="text-[9px] text-zinc-400">{branches.find(b => b.id === u.branchId)?.name || 'Master'}</p>
+                <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-6">
+                  <div>
+                    <h4 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-4 flex items-center gap-2`}>
+                      <Activity className="w-3 h-3" /> Solicitações Pendentes
+                    </h4>
+                    <div className="space-y-2">
+                      {allUsers.filter(u => !u.approved).length === 0 ? (
+                        <p className="text-xs text-zinc-500 italic ml-1">Nenhuma solicitação pendente.</p>
+                      ) : (
+                        allUsers.filter(u => !u.approved).map(u => (
+                          <div key={u.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-zinc-950 border-zinc-800' : 'bg-amber-50 border-amber-100'} border`}>
+                            <div>
+                              <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{u.name}</p>
+                              <p className="text-[10px] text-zinc-500">{u.email}</p>
+                              <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">Filial: {branches.find(b => b.id === u.branchId)?.name}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => handleApproveUser(u.id)}
+                                className="px-3 py-1.5 bg-green-600 text-white text-[10px] font-bold rounded-lg hover:bg-green-500 transition-all"
+                              >
+                                Autorizar
+                              </button>
+                              <button 
+                                onClick={() => handleRejectUser(u.id)}
+                                className="px-3 py-1.5 bg-red-100 text-red-600 text-[10px] font-bold rounded-lg hover:bg-red-200 transition-all"
+                              >
+                                Recusar
+                              </button>
+                            </div>
                           </div>
-                          {u.role !== 'master' && (
-                            <button 
-                              onClick={() => handleDeleteUser(u.id)}
-                              className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
-                              title="Excluir Usuário"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-4`}>Usuários Ativos</h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {allUsers.filter(u => u.approved).map(u => (
+                        <div key={u.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-zinc-950' : 'bg-zinc-50'}`}>
+                          <div>
+                            <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{u.name}</p>
+                            <p className="text-[10px] text-zinc-500">{u.email}</p>
+                          </div>
+                          <div className="text-right flex items-center gap-3">
+                            <div>
+                              <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{u.role}</p>
+                              <p className="text-[9px] text-zinc-400">{branches.find(b => b.id === u.branchId)?.name || 'Master'}</p>
+                            </div>
+                            {u.role !== 'master' && (
+                              <button 
+                                onClick={() => handleDeleteUser(u.id)}
+                                className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
+                                title="Excluir Usuário"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

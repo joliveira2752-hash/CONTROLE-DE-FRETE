@@ -11,6 +11,7 @@ export interface UserProfile {
   role: 'master' | 'admin' | 'user';
   branchId?: string; // Optional for master, required for others
   name: string;
+  approved?: boolean;
 }
 
 export interface Freight {
