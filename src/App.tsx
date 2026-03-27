@@ -314,7 +314,18 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
-    if (!userProfile) return;
+    if (!user) {
+      setBranches([]);
+      return;
+    }
+
+    if (!userProfile) {
+      // Fetch all branches for users without a profile yet (Solicitar Acesso)
+      const unsubBranches = onSnapshot(collection(db, 'branches'), (snapshot) => {
+        setBranches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
+      });
+      return () => unsubBranches();
+    }
 
     // Fetch branches for master
     if (userProfile.role === 'master') {
@@ -337,7 +348,7 @@ function MainApp() {
       });
       return () => unsubBranch();
     }
-  }, [userProfile]);
+  }, [user, userProfile]);
 
   useEffect(() => {
     if (!userProfile) return;
