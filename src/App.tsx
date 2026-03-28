@@ -1,28 +1,5 @@
 import React, { Component, useEffect, useState } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut, 
-  User,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile
-} from 'firebase/auth';
-import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  addDoc,
-  updateDoc,
-  doc,
-  deleteDoc,
-  setDoc,
-  serverTimestamp,
-  where
-} from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import { supabase, isSupabaseConfigured } from './supabase';
 import { Loading, Freight, Employee, Branch, UserProfile } from './types';
 import { 
   Truck, 
@@ -125,9 +102,35 @@ export default function App() {
 }
 
 function MainApp() {
-  const [user, setUser] = useState<User | null>(null);
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-screen bg-zinc-100 flex items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-6 bg-white p-8 rounded-3xl shadow-xl border border-zinc-200">
+          <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Activity size={32} />
+          </div>
+          <h1 className="text-2xl font-bold text-zinc-900">Configuração Necessária</h1>
+          <p className="text-zinc-600">
+            As chaves do Supabase não foram encontradas. Por favor, configure as variáveis de ambiente no menu <strong>Settings</strong> do AI Studio:
+          </p>
+          <div className="bg-zinc-50 p-4 rounded-xl text-left space-y-2 border border-zinc-200">
+            <p className="text-xs font-mono text-zinc-500">VITE_SUPABASE_URL</p>
+            <p className="text-xs font-mono text-zinc-500">VITE_SUPABASE_ANON_KEY</p>
+          </div>
+          <p className="text-sm text-zinc-500 italic">
+            Após configurar as chaves, o aplicativo será reiniciado automaticamente.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -262,59 +265,70 @@ function MainApp() {
   }, [darkMode]);
 
   useEffect(() => {
-    let unsubProfile: (() => void) | null = null;
-    const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (unsubProfile) {
-        unsubProfile();
-        unsubProfile = null;
+    const fetchSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserProfile(session.user.id, session.user.email!, session.user.user_metadata.full_name);
+      } else {
+        setLoading(false);
       }
+    };
 
-      if (currentUser) {
-        // Fetch user profile
-        unsubProfile = onSnapshot(doc(db, 'users', currentUser.uid), async (docSnap) => {
-          if (docSnap.exists()) {
-            const profile = { id: docSnap.id, ...docSnap.data() } as UserProfile;
-            setUserProfile(profile);
-            if (profile.role !== 'master' && profile.branchId) {
-              setSelectedBranchId(profile.branchId);
-            }
-          } else {
-            // Check if it's the master email
-            if (currentUser.email === 'joliveira2752@gmail.com') {
-              try {
-                const masterProfile: UserProfile = {
-                  id: currentUser.uid,
-                  email: currentUser.email!,
-                  role: 'master',
-                  name: currentUser.displayName || 'Master Admin',
-                  approved: true
-                };
-                await setDoc(doc(db, 'users', currentUser.uid), masterProfile);
-                setUserProfile(masterProfile);
-              } catch (err) {
-                console.error("Error creating master profile:", err);
-                setLoginError("Erro ao criar perfil mestre. Verifique as permissões.");
-              }
-            } else {
-              console.log("No profile found for user", currentUser.uid);
-            }
-          }
-          setLoading(false);
-        }, (err) => {
-          console.error("Profile snapshot error:", err);
-          setLoading(false);
-        });
+    fetchSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserProfile(session.user.id, session.user.email!, session.user.user_metadata.full_name);
       } else {
         setUserProfile(null);
         setLoading(false);
       }
     });
-    return () => {
-      unsubAuth();
-      if (unsubProfile) unsubProfile();
-    };
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const fetchUserProfile = async (uid: string, email: string, name: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', uid)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error("Error fetching user profile:", error);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        const profile = data as UserProfile;
+        setUserProfile(profile);
+        if (profile.role !== 'master' && profile.branchId) {
+          setSelectedBranchId(profile.branchId);
+        }
+      } else {
+        if (email === 'joliveira2752@gmail.com') {
+          const masterProfile: UserProfile = {
+            id: uid,
+            email: email,
+            role: 'master',
+            name: name || 'Master Admin',
+            approved: true
+          };
+          await supabase.from('users').upsert(masterProfile);
+          setUserProfile(masterProfile);
+        }
+      }
+    } catch (err) {
+      console.error("Profile fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -322,149 +336,136 @@ function MainApp() {
       return;
     }
 
-    if (!userProfile) {
-      // Fetch all branches for users without a profile yet (Solicitar Acesso)
-      const unsubBranches = onSnapshot(collection(db, 'branches'), (snapshot) => {
-        setBranches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
-      });
-      return () => unsubBranches();
-    }
+    const fetchInitialData = async () => {
+      if (!userProfile) {
+        const { data } = await supabase.from('branches').select('*').order('name');
+        setBranches(data || []);
+        return;
+      }
 
-    // Fetch branches for master
-    if (userProfile.role === 'master') {
-      const unsubBranches = onSnapshot(collection(db, 'branches'), (snapshot) => {
-        setBranches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
-      });
-      const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-        setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
-      });
-      return () => {
-        unsubBranches();
-        unsubUsers();
-      };
-    } else if (userProfile.branchId) {
-      // Fetch only the assigned branch for non-master
-      const unsubBranch = onSnapshot(doc(db, 'branches', userProfile.branchId), (docSnap) => {
-        if (docSnap.exists()) {
-          setBranches([{ id: docSnap.id, ...docSnap.data() } as Branch]);
-        }
-      });
-      return () => unsubBranch();
-    }
+      if (userProfile.role === 'master') {
+        const { data: bData } = await supabase.from('branches').select('*').order('name');
+        setBranches(bData || []);
+        const { data: uData } = await supabase.from('users').select('*').order('name');
+        setAllUsers(uData || []);
+      } else if (userProfile.branchId) {
+        const { data } = await supabase.from('branches').select('*').eq('id', userProfile.branchId).single();
+        if (data) setBranches([data]);
+      }
+    };
+
+    fetchInitialData();
+
+    // Set up subscriptions
+    const branchesSub = supabase.channel('branches-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'branches' }, () => fetchInitialData())
+      .subscribe();
+
+    const usersSub = supabase.channel('users-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => fetchInitialData())
+      .subscribe();
+
+    return () => {
+      branchesSub.unsubscribe();
+      usersSub.unsubscribe();
+    };
   }, [user, userProfile]);
 
   useEffect(() => {
     if (!userProfile) return;
     
-    console.log("Setting up snapshots with branch filter:", selectedBranchId);
-    
-    let loadingsQuery = query(collection(db, 'loadings'), orderBy('date', 'desc'));
-    let freightsQuery = query(collection(db, 'freights'), orderBy('date', 'desc'));
-    let employeesQuery = query(collection(db, 'employees'), orderBy('name', 'asc'));
+    const fetchData = async () => {
+      let lQuery = supabase.from('loadings').select('*').order('date', { ascending: false });
+      let fQuery = supabase.from('freights').select('*').order('date', { ascending: false });
+      let eQuery = supabase.from('employees').select('*').order('name', { ascending: true });
 
-    if (selectedBranchId) {
-      loadingsQuery = query(collection(db, 'loadings'), where('branchId', '==', selectedBranchId), orderBy('date', 'desc'));
-      freightsQuery = query(collection(db, 'freights'), where('branchId', '==', selectedBranchId), orderBy('date', 'desc'));
-      employeesQuery = query(collection(db, 'employees'), where('branchId', '==', selectedBranchId), orderBy('name', 'asc'));
-    }
+      if (selectedBranchId) {
+        lQuery = lQuery.eq('branchId', selectedBranchId);
+        fQuery = fQuery.eq('branchId', selectedBranchId);
+        eQuery = eQuery.eq('branchId', selectedBranchId);
+      }
 
-    const unsubLoadings = onSnapshot(loadingsQuery, (snapshot) => {
-      setLoadings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Loading)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'loadings');
-    });
+      const [lRes, fRes, eRes] = await Promise.all([lQuery, fQuery, eQuery]);
+      setLoadings(lRes.data || []);
+      setFreights(fRes.data || []);
+      setEmployees(eRes.data || []);
+    };
 
-    const unsubFreights = onSnapshot(freightsQuery, (snapshot) => {
-      setFreights(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Freight)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'freights');
-    });
+    fetchData();
 
-    const unsubEmployees = onSnapshot(employeesQuery, (snapshot) => {
-      setEmployees(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'employees');
-    });
+    const loadingsSub = supabase.channel('loadings-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'loadings' }, () => fetchData())
+      .subscribe();
+
+    const freightsSub = supabase.channel('freights-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'freights' }, () => fetchData())
+      .subscribe();
+
+    const employeesSub = supabase.channel('employees-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => fetchData())
+      .subscribe();
 
     return () => {
-      unsubLoadings();
-      unsubFreights();
-      unsubEmployees();
+      loadingsSub.unsubscribe();
+      freightsSub.unsubscribe();
+      employeesSub.unsubscribe();
     };
   }, [userProfile, selectedBranchId]);
 
   const handleCreateBranch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBranchName || userProfile?.role !== 'master') return;
-    try {
-      await addDoc(collection(db, 'branches'), {
-        name: newBranchName,
-        active: true,
-        createdAt: new Date().toISOString()
-      });
-      setNewBranchName('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'branches');
-    }
+    const { error } = await supabase.from('branches').insert({
+      name: newBranchName,
+      active: true
+    });
+    if (!error) setNewBranchName('');
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserEmail || !newUserName || !newUserBranchId || userProfile?.role !== 'master') return;
-    try {
-      await addDoc(collection(db, 'users'), {
-        email: newUserEmail.toLowerCase(),
-        name: newUserName,
-        role: newUserRole,
-        branchId: newUserBranchId,
-        approved: true,
-        createdAt: new Date().toISOString()
-      });
+    const { error } = await supabase.from('users').insert({
+      email: newUserEmail.toLowerCase(),
+      name: newUserName,
+      role: newUserRole,
+      branchId: newUserBranchId,
+      approved: true
+    });
+    if (!error) {
       setNewUserEmail('');
       setNewUserName('');
       setNewUserBranchId('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'users');
     }
   };
 
   const handleRequestAccess = async (branchId: string) => {
     if (!user || !branchId) return;
     setRequestError(null);
-    try {
-      await setDoc(doc(db, 'users', user.uid), {
-        id: user.uid,
-        email: user.email?.toLowerCase(),
-        name: user.displayName || 'Usuário',
-        role: 'user',
-        branchId: branchId,
-        approved: true,
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
+    const { error } = await supabase.from('users').upsert({
+      id: user.id,
+      email: user.email?.toLowerCase(),
+      name: user.user_metadata.full_name || 'Usuário',
+      role: 'user',
+      branchId: branchId,
+      approved: true
+    });
+    if (error) {
       console.error("Erro ao criar perfil:", error);
       setRequestError("Erro ao entrar no sistema. Por favor, tente novamente.");
+    } else {
+      fetchUserProfile(user.id, user.email!, user.user_metadata.full_name);
     }
   };
 
   const handleApproveUser = async (userId: string) => {
     if (userProfile?.role !== 'master') return;
-    try {
-      await updateDoc(doc(db, 'users', userId), {
-        approved: true
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, 'users');
-    }
+    await supabase.from('users').update({ approved: true }).eq('id', userId);
   };
 
   const handleRejectUser = async (userId: string) => {
     if (userProfile?.role !== 'master') return;
-    try {
-      await deleteDoc(doc(db, 'users', userId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'users');
-    }
+    await supabase.from('users').delete().eq('id', userId);
   };
 
   const handleSubmitEmployee = async (e: React.FormEvent) => {
@@ -475,55 +476,62 @@ function MainApp() {
     }
     if (!employeeName || !employeeRole) return;
     setIsSubmittingEmployee(true);
-    try {
-      await addDoc(collection(db, 'employees'), {
-        name: employeeName,
-        role: employeeRole,
-        active: true,
-        branchId: selectedBranchId
-      });
+    const { error } = await supabase.from('employees').insert({
+      name: employeeName,
+      role: employeeRole,
+      active: true,
+      branchId: selectedBranchId
+    });
+    if (!error) {
       setEmployeeName('');
       setEmployeeRole('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'employees');
-    } finally {
-      setIsSubmittingEmployee(false);
     }
+    setIsSubmittingEmployee(false);
   };
 
   const deleteEmployee = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'employees', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `employees/${id}`);
-    }
+    await supabase.from('employees').delete().eq('id', id);
   };
 
   const handleLogin = async () => {
     setLoginError(null);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error: any) {
-      console.error("Login error:", error);
-      if (error.code === 'auth/popup-blocked') {
-        setLoginError("O popup de login foi bloqueado pelo navegador. Por favor, permita popups para este site.");
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        // Ignore user cancellation
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) setLoginError(error.message);
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    
+    if (authMode === 'login') {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: authPassword,
+      });
+      if (error) setLoginError(error.message);
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+      });
+      if (error) {
+        setLoginError(error.message);
       } else {
-        setLoginError("Erro ao fazer login: " + (error.message || "Tente novamente mais tarde."));
+        alert("Cadastro realizado! Verifique seu e-mail se necessário ou tente entrar.");
+        setAuthMode('login');
       }
     }
   };
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setUser(null);
-      setUserProfile(null);
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+    await supabase.auth.signOut();
+    setUser(null);
+    setUserProfile(null);
   };
 
   const handleSubmitFreight = async (e: React.FormEvent) => {
@@ -535,22 +543,21 @@ function MainApp() {
     if (!freightDesc || !freightProduct || !freightTotalWeight || !freightOrigin || !freightDestination) return;
 
     setIsSubmittingFreight(true);
-    const path = 'freights';
-    try {
-      await addDoc(collection(db, path), {
-        branchId: selectedBranchId,
-        description: freightDesc,
-        product: freightProduct,
-        origin: freightOrigin,
-        destination: freightDestination,
-        totalWeight: Number(freightTotalWeight),
-        valorFrete: Number(freightValorFrete) || 0,
-        valorRecebido: Number(freightValorRecebido) || 0,
-        valorPagoMotorista: Number(freightValorPagoMotorista) || 0,
-        status: 'Aberto',
-        date: new Date().toISOString(),
-        observations: freightObservations
-      });
+    const { error } = await supabase.from('freights').insert({
+      branchId: selectedBranchId,
+      description: freightDesc,
+      product: freightProduct,
+      origin: freightOrigin,
+      destination: freightDestination,
+      totalWeight: Number(freightTotalWeight),
+      valorFrete: Number(freightValorFrete) || 0,
+      valorRecebido: Number(freightValorRecebido) || 0,
+      valorPagoMotorista: Number(freightValorPagoMotorista) || 0,
+      status: 'Aberto',
+      date: new Date().toISOString(),
+      observations: freightObservations
+    });
+    if (!error) {
       setFreightDesc('');
       setFreightProduct('');
       setFreightOrigin('');
@@ -560,11 +567,8 @@ function MainApp() {
       setFreightValorRecebido('');
       setFreightValorPagoMotorista('');
       setFreightObservations('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
-    } finally {
-      setIsSubmittingFreight(false);
     }
+    setIsSubmittingFreight(false);
   };
 
   const handleSubmitLoading = async (e: React.FormEvent) => {
@@ -576,26 +580,25 @@ function MainApp() {
     if (!selectedFreightId || !driverName || !plate || !weight) return;
 
     setIsSubmittingLoading(true);
-    const path = 'loadings';
     const orderGiver = employees.find(emp => emp.id === orderGiverId);
-    try {
-      await addDoc(collection(db, path), {
-        branchId: selectedBranchId,
-        freightId: selectedFreightId,
-        driverName,
-        plate: plate.toUpperCase(),
-        weight: Number(weight),
-        manifestoDone: false,
-        unloaded: false,
-        date: loadingDate,
-        manifestoDate: manifestoDate || null,
-        unloadedDate: unloadedDate || null,
-        observations: loadingObservations,
-        orderGiverId: orderGiverId || null,
-        orderGiverName: orderGiver?.name || null,
-        driverUnitPrice: Number(driverUnitPrice) || 0,
-        driverValue: Number(driverValue) || 0
-      });
+    const { error } = await supabase.from('loadings').insert({
+      branchId: selectedBranchId,
+      freightId: selectedFreightId,
+      driverName,
+      plate: plate.toUpperCase(),
+      weight: Number(weight),
+      manifestoDone: false,
+      unloaded: false,
+      date: loadingDate,
+      manifestoDate: manifestoDate || null,
+      unloadedDate: unloadedDate || null,
+      observations: loadingObservations,
+      orderGiverId: orderGiverId || null,
+      orderGiverName: orderGiver?.name || null,
+      driverUnitPrice: Number(driverUnitPrice) || 0,
+      driverValue: Number(driverValue) || 0
+    });
+    if (!error) {
       setDriverName('');
       setPlate('');
       setWeight('');
@@ -606,78 +609,51 @@ function MainApp() {
       setOrderGiverId('');
       setDriverUnitPrice('');
       setDriverValue('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
-    } finally {
-      setIsSubmittingLoading(false);
     }
+    setIsSubmittingLoading(false);
   };
 
   const toggleStatus = async (id: string, field: 'manifestoDone' | 'unloaded', value: boolean) => {
-    const path = `loadings/${id}`;
     const now = new Date().toISOString().split('T')[0];
-    try {
-      const updates: any = { [field]: !value };
-      if (field === 'manifestoDone' && !value) {
-        updates.manifestoDate = now;
-      } else if (field === 'unloaded' && !value) {
-        updates.unloadedDate = now;
-      }
-      await updateDoc(doc(db, 'loadings', id), updates);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, path);
+    const updates: any = { [field]: !value };
+    if (field === 'manifestoDone' && !value) {
+      updates.manifestoDate = now;
+    } else if (field === 'unloaded' && !value) {
+      updates.unloadedDate = now;
     }
+    await supabase.from('loadings').update(updates).eq('id', id);
   };
 
   const handleDeleteUser = async (userId: string) => {
     if (userProfile?.role !== 'master') return;
-    if (userId === user?.uid) {
+    if (userId === user?.id) {
       alert("Você não pode excluir seu próprio usuário master!");
       return;
     }
     if (!window.confirm("Tem certeza que deseja excluir este usuário?")) return;
-    
-    try {
-      await deleteDoc(doc(db, 'users', userId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
-    }
+    await supabase.from('users').delete().eq('id', userId);
   };
 
   const handleTransferLoading = async (loadingId: string, newFreightId: string) => {
-    try {
-      const freight = freights.find(f => f.id === newFreightId);
-      if (!freight) return;
+    const freight = freights.find(f => f.id === newFreightId);
+    if (!freight) return;
 
-      await updateDoc(doc(db, 'loadings', loadingId), {
-        freightId: newFreightId,
-        branchId: freight.branchId
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `loadings/${loadingId}`);
-    }
+    await supabase.from('loadings').update({
+      freightId: newFreightId,
+      branchId: freight.branchId
+    }).eq('id', loadingId);
   };
 
   const deleteLoading = async (id: string) => {
-    const path = `loadings/${id}`;
-    try {
-      await deleteDoc(doc(db, 'loadings', id));
-      setDeletingId(null);
-      setDeletingType(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
-    }
+    await supabase.from('loadings').delete().eq('id', id);
+    setDeletingId(null);
+    setDeletingType(null);
   };
 
   const deleteFreight = async (id: string) => {
-    const path = `freights/${id}`;
-    try {
-      await deleteDoc(doc(db, 'freights', id));
-      setDeletingId(null);
-      setDeletingType(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
-    }
+    await supabase.from('freights').delete().eq('id', id);
+    setDeletingId(null);
+    setDeletingType(null);
   };
 
   const startEditing = (loading: Loading) => {
@@ -701,24 +677,20 @@ function MainApp() {
   const saveEdit = async (id: string) => {
     if (!editDriverName || !editPlate || !editWeight) return;
     const orderGiver = employees.find(emp => emp.id === editOrderGiverId);
-    try {
-      await updateDoc(doc(db, 'loadings', id), {
-        driverName: editDriverName,
-        plate: editPlate.toUpperCase(),
-        weight: Number(editWeight),
-        date: editLoadingDate,
-        manifestoDate: editManifestoDate || null,
-        unloadedDate: editUnloadedDate || null,
-        observations: editObservations,
-        orderGiverId: editOrderGiverId || null,
-        orderGiverName: orderGiver?.name || null,
-        driverUnitPrice: Number(editDriverUnitPrice) || 0,
-        driverValue: Number(editDriverValue) || 0
-      });
-      setEditingId(null);
-    } catch (error) {
-      console.error("Erro ao salvar edição:", error);
-    }
+    const { error } = await supabase.from('loadings').update({
+      driverName: editDriverName,
+      plate: editPlate.toUpperCase(),
+      weight: Number(editWeight),
+      date: editLoadingDate,
+      manifestoDate: editManifestoDate || null,
+      unloadedDate: editUnloadedDate || null,
+      observations: editObservations,
+      orderGiverId: editOrderGiverId || null,
+      orderGiverName: orderGiver?.name || null,
+      driverUnitPrice: Number(editDriverUnitPrice) || 0,
+      driverValue: Number(editDriverValue) || 0
+    }).eq('id', id);
+    if (!error) setEditingId(null);
   };
 
   const startEditingFreight = (freight: Freight) => {
@@ -741,23 +713,19 @@ function MainApp() {
 
   const saveEditFreight = async (id: string) => {
     if (!editFreightDesc || !editFreightProduct || !editFreightTotalWeight || !editFreightOrigin || !editFreightDestination) return;
-    try {
-      await updateDoc(doc(db, 'freights', id), {
-        description: editFreightDesc,
-        product: editFreightProduct,
-        origin: editFreightOrigin,
-        destination: editFreightDestination,
-        totalWeight: Number(editFreightTotalWeight),
-        valorFrete: Number(editFreightValorFrete) || 0,
-        valorRecebido: Number(editFreightValorRecebido) || 0,
-        valorPagoMotorista: Number(editFreightValorPagoMotorista) || 0,
-        observations: editFreightObservations,
-        status: editFreightStatus
-      });
-      setEditingFreightId(null);
-    } catch (error) {
-      console.error("Erro ao salvar edição do frete:", error);
-    }
+    const { error } = await supabase.from('freights').update({
+      description: editFreightDesc,
+      product: editFreightProduct,
+      origin: editFreightOrigin,
+      destination: editFreightDestination,
+      totalWeight: Number(editFreightTotalWeight),
+      valorFrete: Number(editFreightValorFrete) || 0,
+      valorRecebido: Number(editFreightValorRecebido) || 0,
+      valorPagoMotorista: Number(editFreightValorPagoMotorista) || 0,
+      observations: editFreightObservations,
+      status: editFreightStatus
+    }).eq('id', id);
+    if (!error) setEditingFreightId(null);
   };
 
   const exportToCSV = (data: any[], filename: string) => {
@@ -903,16 +871,65 @@ function MainApp() {
               <Truck className="text-white w-8 h-8" />
             </div>
             <h1 className="text-3xl font-bold text-zinc-900">Logística Multi-Filial</h1>
-            <p className="text-zinc-500">Acesse o sistema para gerenciar suas operações</p>
+            <p className="text-zinc-500">{authMode === 'login' ? 'Entre na sua conta' : 'Crie sua conta'}</p>
           </div>
-          
+
+          <form onSubmit={handleEmailAuth} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">E-mail</label>
+              <input 
+                type="email"
+                required
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                placeholder="seu@email.com"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Senha</label>
+              <input 
+                type="password"
+                required
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                placeholder="••••••••"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full py-4 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200"
+            >
+              {authMode === 'login' ? 'Entrar' : 'Cadastrar'}
+            </button>
+          </form>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-zinc-100"></span>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-zinc-400 font-bold">Ou</span>
+            </div>
+          </div>
+
           <button
             onClick={handleLogin}
-            className="w-full py-4 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 shadow-lg shadow-zinc-200"
+            className="w-full py-4 border-2 border-zinc-100 text-zinc-900 font-bold rounded-2xl hover:bg-zinc-50 transition-all flex items-center justify-center gap-3"
           >
             <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
             Entrar com Google
           </button>
+
+          <div className="text-center">
+            <button 
+              onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+              className="text-sm font-bold text-zinc-500 hover:text-zinc-900 transition-colors"
+            >
+              {authMode === 'login' ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Entre'}
+            </button>
+          </div>
 
           {loginError && (
             <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium text-center">
