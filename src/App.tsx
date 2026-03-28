@@ -252,6 +252,7 @@ function MainApp() {
   const [dashboardFilterStartDate, setDashboardFilterStartDate] = useState('');
   const [dashboardFilterEndDate, setDashboardFilterEndDate] = useState('');
   const [requestBranchId, setRequestBranchId] = useState('');
+  const [requestError, setRequestError] = useState<string | null>(null);
   const [reportFilterStartDate, setReportFilterStartDate] = useState('');
   const [reportFilterEndDate, setReportFilterEndDate] = useState('');
   const [freightSearch, setFreightSearch] = useState('');
@@ -429,8 +430,10 @@ function MainApp() {
 
   const handleRequestAccess = async (branchId: string) => {
     if (!user || !branchId) return;
+    setRequestError(null);
     try {
       await setDoc(doc(db, 'users', user.uid), {
+        id: user.uid,
         email: user.email?.toLowerCase(),
         name: user.displayName || 'Usuário',
         role: 'user',
@@ -439,7 +442,8 @@ function MainApp() {
         createdAt: new Date().toISOString()
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'users');
+      console.error("Erro ao criar perfil:", error);
+      setRequestError("Erro ao entrar no sistema. Por favor, tente novamente.");
     }
   };
 
@@ -942,7 +946,10 @@ function MainApp() {
               <select 
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
                 value={requestBranchId}
-                onChange={(e) => setRequestBranchId(e.target.value)}
+                onChange={(e) => {
+                  setRequestBranchId(e.target.value);
+                  setRequestError(null);
+                }}
               >
                 <option value="">Selecione uma filial...</option>
                 {branches.map(b => (
@@ -950,6 +957,13 @@ function MainApp() {
                 ))}
               </select>
             </div>
+
+            {requestError && (
+              <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                <p className="text-xs text-red-600 font-medium">{requestError}</p>
+              </div>
+            )}
+
             <button 
               onClick={() => handleRequestAccess(requestBranchId)}
               disabled={!requestBranchId}

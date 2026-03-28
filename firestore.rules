@@ -7,7 +7,8 @@ service cloud.firestore {
     }
 
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data : {};
     }
 
     function isMaster() {
@@ -36,10 +37,8 @@ service cloud.firestore {
     // Users
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isMaster());
-      allow create: if isMaster() || (
-        request.auth.uid == userId && 
-        request.resource.data.role == 'user' && 
-        request.resource.data.approved == true
+      allow create: if isAuthenticated() && request.auth.uid == userId && (
+        isMaster() || request.resource.data.role == 'user'
       );
       allow update: if isMaster() || (
         request.auth.uid == userId && 
