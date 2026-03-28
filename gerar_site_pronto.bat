@@ -13,6 +13,7 @@ if %errorlevel% neq 0 (
 )
 
 echo 2. Instalando ferramentas (npm install)...
+echo Isso pode demorar alguns minutos...
 call npm install
 
 echo 3. Criando o site final (npm run build)...
@@ -26,6 +27,10 @@ echo   Agora siga estes passos:
 echo   1. Abra a pasta "dist" que apareceu no seu PC.
 echo   2. No painel da Hostinger, abra o Gerenciador de Arquivos.
 echo   3. Entre na pasta public_html.
-echo   4. Arraste TUDO o que esta DENTRO da pasta "dist" para la.
+echo   4. APAGUE TUDO o que estiver la dentro (index.php, default.php, etc).
+echo   5. Arraste TUDO o que esta DENTRO da pasta "dist" para la.
+echo.
+echo   IMPORTANTE: Nao use o botao "Migrar Site" da Hostinger. 
+echo   Use o "Gerenciador de Arquivos" (File Manager).
 echo ======================================================
 pause
