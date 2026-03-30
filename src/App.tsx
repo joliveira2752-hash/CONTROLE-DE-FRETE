@@ -76,6 +76,57 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 interface ErrorBoundaryProps {
   children: React.ReactNode;
 }
@@ -98,20 +149,48 @@ class ErrorBoundary extends Component<any, any> {
   render() {
     const { hasError, error } = (this as any).state;
     if (hasError) {
+      let displayError = error?.message;
+      let isJsonError = false;
+      try {
+        const parsed = JSON.parse(error?.message);
+        if (parsed.error && parsed.operationType) {
+          displayError = parsed.error;
+          isJsonError = true;
+        }
+      } catch (e) {}
+
       return (
         <div className="min-h-screen bg-zinc-100 flex items-center justify-center p-6 text-center">
           <div className="max-w-md space-y-4">
-            <h1 className="text-2xl font-bold text-red-500">Ops! Algo deu errado.</h1>
-            <p className="text-zinc-500">Ocorreu um erro inesperado no sistema.</p>
-            <div className="bg-white border border-zinc-200 p-4 rounded-xl text-left overflow-auto max-h-60">
-              <code className="text-xs text-red-500">{error?.message}</code>
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Activity className="w-8 h-8" />
             </div>
-            <button 
-              onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800 transition-colors"
-            >
-              Recarregar Aplicativo
-            </button>
+            <h1 className="text-2xl font-bold text-zinc-900">Ops! Algo deu errado.</h1>
+            <p className="text-zinc-500">Ocorreu um erro inesperado no sistema.</p>
+            <div className="bg-white border border-zinc-200 p-4 rounded-xl text-left overflow-auto max-h-60 shadow-sm">
+              <p className="text-[10px] uppercase font-bold text-zinc-400 mb-2">Detalhes do Erro</p>
+              <code className="text-xs text-red-500 block break-words">
+                {isJsonError ? (
+                  <pre className="whitespace-pre-wrap">{JSON.stringify(JSON.parse(error.message), null, 2)}</pre>
+                ) : (
+                  displayError
+                )}
+              </code>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button 
+                onClick={() => window.location.reload()}
+                className="w-full px-6 py-3 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800 transition-colors shadow-lg shadow-zinc-900/20"
+              >
+                Recarregar Aplicativo
+              </button>
+              <button 
+                onClick={() => (this as any).setState({ hasError: false, error: null })}
+                className="w-full px-6 py-3 bg-white text-zinc-900 font-bold rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-colors"
+              >
+                Tentar Novamente
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -269,6 +348,17 @@ function MainApp() {
   }, [darkMode]);
 
   useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. ");
+        }
+      }
+    }
+    testConnection();
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -283,6 +373,7 @@ function MainApp() {
   }, []);
 
   const fetchUserProfile = async (uid: string, email: string, name: string) => {
+    const path = `users/${uid}`;
     try {
       const userDocRef = doc(db, 'users', uid);
       const userDoc = await getDoc(userDocRef);
@@ -307,7 +398,7 @@ function MainApp() {
         }
       }
     } catch (err) {
-      console.error("Profile fetch error:", err);
+      handleFirestoreError(err, OperationType.GET, path);
     } finally {
       setLoading(false);
     }
@@ -321,27 +412,31 @@ function MainApp() {
     }
 
     const fetchInitialData = async () => {
-      if (userProfile.role === 'master') {
-        const branchesQuery = query(collection(db, 'branches'), orderBy('name'));
-        const branchesSnap = await getDocs(branchesQuery);
-        setBranches(branchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
+      try {
+        if (userProfile.role === 'master') {
+          const branchesQuery = query(collection(db, 'branches'), orderBy('name'));
+          const branchesSnap = await getDocs(branchesQuery);
+          setBranches(branchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
 
-        const usersQuery = query(collection(db, 'users'), orderBy('name'));
-        const usersSnap = await getDocs(usersQuery);
-        setAllUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
-      } else if (userProfile.branchId) {
-        const branchDoc = await getDoc(doc(db, 'branches', userProfile.branchId));
-        if (branchDoc.exists()) {
-          setBranches([{ id: branchDoc.id, ...branchDoc.data() } as Branch]);
+          const usersQuery = query(collection(db, 'users'), orderBy('name'));
+          const usersSnap = await getDocs(usersQuery);
+          setAllUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
+        } else if (userProfile.branchId) {
+          const branchDoc = await getDoc(doc(db, 'branches', userProfile.branchId));
+          if (branchDoc.exists()) {
+            setBranches([{ id: branchDoc.id, ...branchDoc.data() } as Branch]);
+          }
         }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, 'initial_data');
       }
     };
 
     fetchInitialData();
 
     // Set up subscriptions
-    const branchesUnsub = onSnapshot(collection(db, 'branches'), () => fetchInitialData());
-    const usersUnsub = onSnapshot(collection(db, 'users'), () => fetchInitialData());
+    const branchesUnsub = onSnapshot(collection(db, 'branches'), () => fetchInitialData(), (err) => handleFirestoreError(err, OperationType.LIST, 'branches'));
+    const usersUnsub = onSnapshot(collection(db, 'users'), () => fetchInitialData(), (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
     return () => {
       branchesUnsub();
@@ -364,15 +459,15 @@ function MainApp() {
 
     const unsubLoadings = onSnapshot(lQuery, (snap) => {
       setLoadings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Loading)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'loadings'));
 
     const unsubFreights = onSnapshot(fQuery, (snap) => {
       setFreights(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Freight)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'freights'));
 
     const unsubEmployees = onSnapshot(eQuery, (snap) => {
       setEmployees(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'employees'));
 
     return () => {
       unsubLoadings();
@@ -384,6 +479,7 @@ function MainApp() {
   const handleCreateBranch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBranchName || userProfile?.role !== 'master') return;
+    const path = 'branches';
     try {
       await addDoc(collection(db, 'branches'), {
         name: newBranchName,
@@ -392,13 +488,14 @@ function MainApp() {
       });
       setNewBranchName('');
     } catch (err) {
-      console.error("Error creating branch:", err);
+      handleFirestoreError(err, OperationType.CREATE, path);
     }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserEmail || !newUserName || !newUserBranchId || userProfile?.role !== 'master') return;
+    const path = 'users';
     try {
       await addDoc(collection(db, 'users'), {
         email: newUserEmail.toLowerCase(),
@@ -411,13 +508,14 @@ function MainApp() {
       setNewUserName('');
       setNewUserBranchId('');
     } catch (err) {
-      console.error("Error creating user:", err);
+      handleFirestoreError(err, OperationType.CREATE, path);
     }
   };
 
   const handleRequestAccess = async (branchId: string) => {
     if (!user || !branchId) return;
     setRequestError(null);
+    const path = `users/${user.uid}`;
     try {
       await setDoc(doc(db, 'users', user.uid), {
         id: user.uid,
@@ -429,19 +527,28 @@ function MainApp() {
       }, { merge: true });
       fetchUserProfile(user.uid, user.email!, user.displayName || 'Usuário');
     } catch (error) {
-      console.error("Erro ao criar perfil:", error);
-      setRequestError("Erro ao entrar no sistema. Por favor, tente novamente.");
+      handleFirestoreError(error, OperationType.WRITE, path);
     }
   };
 
   const handleApproveUser = async (userId: string) => {
     if (userProfile?.role !== 'master') return;
-    await updateDoc(doc(db, 'users', userId), { approved: true });
+    const path = `users/${userId}`;
+    try {
+      await updateDoc(doc(db, 'users', userId), { approved: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
   };
 
   const handleRejectUser = async (userId: string) => {
     if (userProfile?.role !== 'master') return;
-    await deleteDoc(doc(db, 'users', userId));
+    const path = `users/${userId}`;
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
   };
 
   const handleSubmitEmployee = async (e: React.FormEvent) => {
@@ -452,6 +559,7 @@ function MainApp() {
     }
     if (!employeeName || !employeeRole) return;
     setIsSubmittingEmployee(true);
+    const path = 'employees';
     try {
       await addDoc(collection(db, 'employees'), {
         name: employeeName,
@@ -462,13 +570,18 @@ function MainApp() {
       setEmployeeName('');
       setEmployeeRole('');
     } catch (err) {
-      console.error("Error creating employee:", err);
+      handleFirestoreError(err, OperationType.CREATE, path);
     }
     setIsSubmittingEmployee(false);
   };
 
   const deleteEmployee = async (id: string) => {
-    await deleteDoc(doc(db, 'employees', id));
+    const path = `employees/${id}`;
+    try {
+      await deleteDoc(doc(db, 'employees', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
   };
 
   const handleLogin = async () => {
@@ -527,6 +640,7 @@ function MainApp() {
     if (!freightDesc || !freightProduct || !freightTotalWeight || !freightOrigin || !freightDestination) return;
 
     setIsSubmittingFreight(true);
+    const path = 'freights';
     try {
       await addDoc(collection(db, 'freights'), {
         branchId: selectedBranchId,
@@ -552,7 +666,7 @@ function MainApp() {
       setFreightValorPagoMotorista('');
       setFreightObservations('');
     } catch (err) {
-      console.error("Error creating freight:", err);
+      handleFirestoreError(err, OperationType.CREATE, path);
     }
     setIsSubmittingFreight(false);
   };
@@ -567,6 +681,7 @@ function MainApp() {
 
     setIsSubmittingLoading(true);
     const orderGiver = employees.find(emp => emp.id === orderGiverId);
+    const path = 'loadings';
     try {
       await addDoc(collection(db, 'loadings'), {
         branchId: selectedBranchId,
@@ -596,7 +711,7 @@ function MainApp() {
       setDriverUnitPrice('');
       setDriverValue('');
     } catch (err) {
-      console.error("Error creating loading:", err);
+      handleFirestoreError(err, OperationType.CREATE, path);
     }
     setIsSubmittingLoading(false);
   };
@@ -609,10 +724,11 @@ function MainApp() {
     } else if (field === 'unloaded' && !value) {
       updates.unloadedDate = now;
     }
+    const path = `loadings/${id}`;
     try {
       await updateDoc(doc(db, 'loadings', id), updates);
     } catch (err) {
-      console.error("Error toggling status:", err);
+      handleFirestoreError(err, OperationType.UPDATE, path);
     }
   };
 
@@ -623,10 +739,11 @@ function MainApp() {
       return;
     }
     if (!window.confirm("Tem certeza que deseja excluir este usuário?")) return;
+    const path = `users/${userId}`;
     try {
       await deleteDoc(doc(db, 'users', userId));
     } catch (err) {
-      console.error("Error deleting user:", err);
+      handleFirestoreError(err, OperationType.DELETE, path);
     }
   };
 
@@ -634,33 +751,36 @@ function MainApp() {
     const freight = freights.find(f => f.id === newFreightId);
     if (!freight) return;
 
+    const path = `loadings/${loadingId}`;
     try {
       await updateDoc(doc(db, 'loadings', loadingId), {
         freightId: newFreightId,
         branchId: freight.branchId
       });
     } catch (err) {
-      console.error("Error transferring loading:", err);
+      handleFirestoreError(err, OperationType.UPDATE, path);
     }
   };
 
   const deleteLoading = async (id: string) => {
+    const path = `loadings/${id}`;
     try {
       await deleteDoc(doc(db, 'loadings', id));
       setDeletingId(null);
       setDeletingType(null);
     } catch (err) {
-      console.error("Error deleting loading:", err);
+      handleFirestoreError(err, OperationType.DELETE, path);
     }
   };
 
   const deleteFreight = async (id: string) => {
+    const path = `freights/${id}`;
     try {
       await deleteDoc(doc(db, 'freights', id));
       setDeletingId(null);
       setDeletingType(null);
     } catch (err) {
-      console.error("Error deleting freight:", err);
+      handleFirestoreError(err, OperationType.DELETE, path);
     }
   };
 
@@ -685,6 +805,7 @@ function MainApp() {
   const saveEdit = async (id: string) => {
     if (!editDriverName || !editPlate || !editWeight) return;
     const orderGiver = employees.find(emp => emp.id === editOrderGiverId);
+    const path = `loadings/${id}`;
     try {
       await updateDoc(doc(db, 'loadings', id), {
         driverName: editDriverName,
@@ -701,7 +822,7 @@ function MainApp() {
       });
       setEditingId(null);
     } catch (err) {
-      console.error("Error updating loading:", err);
+      handleFirestoreError(err, OperationType.UPDATE, path);
     }
   };
 
@@ -725,6 +846,7 @@ function MainApp() {
 
   const saveEditFreight = async (id: string) => {
     if (!editFreightDesc || !editFreightProduct || !editFreightTotalWeight || !editFreightOrigin || !editFreightDestination) return;
+    const path = `freights/${id}`;
     try {
       await updateDoc(doc(db, 'freights', id), {
         description: editFreightDesc,
@@ -740,7 +862,7 @@ function MainApp() {
       });
       setEditingFreightId(null);
     } catch (err) {
-      console.error("Error updating freight:", err);
+      handleFirestoreError(err, OperationType.UPDATE, path);
     }
   };
 
