@@ -32,6 +32,4 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./public_html/
-          protocol: ftp
-          port: 21
-          clean: true
+          dangerous-clean-slate: true
