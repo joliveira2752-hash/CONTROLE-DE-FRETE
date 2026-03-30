@@ -7,10 +7,31 @@
   </head>
   <body>
     <div id="root">
-      <div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #71717a;">
-        Carregando sistema...
+      <div id="loading-screen" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #71717a; gap: 10px;">
+        <div>Carregando sistema...</div>
+        <div id="error-msg" style="color: #ef4444; font-size: 12px; max-width: 80%; text-align: center;"></div>
       </div>
     </div>
+    <script>
+      // Detector de erros para ajudar o usuário
+      window.onerror = function(msg, url, line, col, error) {
+        var errorDiv = document.getElementById('error-msg');
+        if (errorDiv) {
+          errorDiv.innerHTML = 'Erro ao carregar: ' + msg + '<br><small>Verifique se a pasta "assets" foi enviada corretamente.</small>';
+        }
+        return false;
+      };
+      // Se demorar mais de 10 segundos, avisa que pode haver um problema
+      setTimeout(function() {
+        var loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen && !window.appInitialized) {
+          var errorDiv = document.getElementById('error-msg');
+          if (errorDiv && errorDiv.innerHTML === '') {
+            errorDiv.innerHTML = 'O carregamento está demorando mais que o normal.<br>Certifique-se de que todos os arquivos da pasta "dist" foram enviados.';
+          }
+        }
+      }, 10000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
