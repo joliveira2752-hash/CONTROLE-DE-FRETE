@@ -587,20 +587,44 @@ function MainApp() {
   const handleLogin = async () => {
     setLoginError(null);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error('Erro no login com Google:', err);
-      setLoginError('Erro ao conectar com Google: ' + err.message);
+      let message = 'Erro ao conectar com Google: ' + err.message;
+      if (err.code === 'auth/popup-blocked') {
+        message = 'O popup de login foi bloqueado pelo seu navegador. Por favor, permita popups para este site e tente novamente.';
+      } else if (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user') {
+        message = 'O login foi cancelado ou o popup foi fechado antes de completar.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        message = 'O login com Google não está habilitado no console do Firebase (Authentication > Sign-in method).';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        message = 'Este domínio não está autorizado no Firebase. Adicione "' + window.location.hostname + '" na lista de domínios autorizados no Console do Firebase.';
+      }
+      setLoginError(message);
     }
   };
 
   const handleGithubLogin = async () => {
     setLoginError(null);
     try {
-      await signInWithPopup(auth, githubProvider);
+      const provider = new GithubAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error('Erro no login com GitHub:', err);
-      setLoginError('Erro ao conectar com GitHub: ' + err.message);
+      let message = 'Erro ao conectar com GitHub: ' + err.message;
+      if (err.code === 'auth/popup-blocked') {
+        message = 'O popup de login foi bloqueado pelo seu navegador. Por favor, permita popups para este site e tente novamente.';
+      } else if (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user') {
+        message = 'O login foi cancelado ou o popup foi fechado antes de completar.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        message = 'O login com GitHub não está habilitado no console do Firebase (Authentication > Sign-in method).';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        message = 'Este domínio não está autorizado no Firebase. Adicione "' + window.location.hostname + '" na lista de domínios autorizados no Console do Firebase.';
+      }
+      setLoginError(message);
     }
   };
 
