@@ -211,8 +211,10 @@ export default function App() {
 function MainApp() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [showLanding, setShowLanding] = useState(true);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [authEmail, setAuthEmail] = useState('');
+  const [authName, setAuthName] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -637,8 +639,21 @@ function MainApp() {
       if (authMode === 'login') {
         await signInWithEmailAndPassword(auth, authEmail, authPassword);
       } else {
-        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-        alert("Cadastro realizado! Verifique seu e-mail se necessário ou tente entrar.");
+        const userCredential = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+        const newUser = userCredential.user;
+        
+        // Create user profile immediately
+        const userDocRef = doc(db, 'users', newUser.uid);
+        const newUserProfile: UserProfile = {
+          id: newUser.uid,
+          email: authEmail,
+          name: authName || 'Novo Usuário',
+          role: 'user',
+          approved: false
+        };
+        await setDoc(userDocRef, newUserProfile);
+        
+        alert("Cadastro realizado! Aguarde a aprovação do administrador.");
         setAuthMode('login');
       }
     } catch (error: any) {
@@ -1026,35 +1041,295 @@ function MainApp() {
   if (loading) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 space-y-8 border border-zinc-100">
-          <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-200">
-              <Truck className="text-white w-8 h-8" />
+    if (showLanding) {
+      return (
+        <div className="min-h-screen bg-black text-white font-sans selection:bg-neon selection:text-black">
+          {/* Header */}
+          <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-zinc-900">
+            <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-neon rounded-xl flex items-center justify-center shadow-lg shadow-neon/40">
+                  <Truck className="text-black w-6 h-6" />
+                </div>
+                <span className="text-xl font-bold tracking-tight text-white">Controle de Frete</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => { setShowLanding(false); setAuthMode('login'); }}
+                  className="text-sm font-bold text-zinc-500 hover:text-neon transition-colors"
+                >
+                  Entrar
+                </button>
+                <button 
+                  onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
+                  className="px-6 py-2.5 bg-neon text-black text-sm font-bold rounded-xl hover:bg-neon/90 transition-all shadow-lg shadow-neon/20"
+                >
+                  Criar Conta
+                </button>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold text-zinc-900">Logística Multi-Filial</h1>
-            <p className="text-zinc-500">{authMode === 'login' ? 'Entre na sua conta' : 'Crie sua conta'}</p>
+          </nav>
+
+          {/* Hero Section */}
+          <section className="pt-40 pb-20 px-6">
+            <div className="max-w-5xl mx-auto text-center space-y-8">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-neon/10 text-neon rounded-full text-xs font-bold uppercase tracking-wider border border-neon/20">
+                <Activity className="w-4 h-4" />
+                Gestão Logística Inteligente
+              </div>
+              <h1 className="text-6xl md:text-8xl font-black font-display tracking-tighter leading-[0.85] text-white">
+                A solução definitiva para seu <span className="text-neon">controle de frete.</span>
+              </h1>
+              <p className="text-xl text-zinc-500 max-w-2xl mx-auto leading-relaxed font-sans">
+                Gerencie múltiplas filiais, acompanhe carregamentos em tempo real e tenha controle financeiro total em uma única plataforma intuitiva.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+                <button 
+                  onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
+                  className="w-full sm:w-auto px-10 py-5 bg-neon text-black font-bold rounded-2xl hover:bg-neon/90 transition-all shadow-2xl shadow-neon/40 flex items-center justify-center gap-3 group"
+                >
+                  Começar Agora Gratuitamente
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+                <button 
+                  onClick={() => { setShowLanding(false); setAuthMode('login'); }}
+                  className="w-full sm:w-auto px-10 py-5 bg-zinc-900 text-white font-bold rounded-2xl border border-zinc-800 hover:bg-zinc-800 transition-all"
+                >
+                  Ver Demonstração
+                </button>
+              </div>
+              
+              {/* Mock Dashboard Preview - Inspired by the provided image */}
+              <div className="pt-16">
+                <div className="relative mx-auto max-w-5xl bg-[#1a1a1a] rounded-[2rem] p-6 shadow-2xl shadow-neon/10 overflow-hidden border border-zinc-800/50">
+                  <div className="bg-[#121212] rounded-2xl aspect-video flex items-center justify-center relative overflow-hidden border border-zinc-800/30">
+                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-neon via-transparent to-transparent"></div>
+                    
+                    <div className="grid grid-cols-12 gap-4 p-8 w-full h-full">
+                      {/* Left Sidebar Mock */}
+                      <div className="col-span-8 bg-[#1a1a1a]/50 rounded-2xl border border-zinc-800/50 p-8 space-y-6">
+                        <div className="h-4 w-1/3 bg-zinc-800 rounded-full"></div>
+                        <div className="space-y-3">
+                          <div className="h-2 w-full bg-zinc-800/50 rounded-full"></div>
+                          <div className="h-2 w-full bg-zinc-800/50 rounded-full"></div>
+                          <div className="h-2 w-2/3 bg-zinc-800/50 rounded-full"></div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4 pt-8">
+                          <div className="h-24 bg-zinc-800/30 rounded-xl border border-zinc-800/20"></div>
+                          <div className="h-24 bg-zinc-800/30 rounded-xl border border-zinc-800/20"></div>
+                          <div className="h-24 bg-zinc-800/30 rounded-xl border border-zinc-800/20"></div>
+                        </div>
+                      </div>
+                      
+                      {/* Right Sidebar Mock */}
+                      <div className="col-span-4 space-y-4">
+                        <div className="h-40 bg-[#1a1a1a]/50 rounded-2xl border border-zinc-800/50 p-6 flex flex-col items-center justify-center relative overflow-hidden">
+                          <div className="h-3 w-1/2 bg-zinc-800 rounded-full mb-6"></div>
+                          {/* Neon Circle from image */}
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-neon/20 blur-xl rounded-full"></div>
+                            <div className="w-20 h-20 bg-neon/10 rounded-full border-4 border-neon/30 flex items-center justify-center relative z-10">
+                              <div className="w-10 h-10 bg-neon rounded-full shadow-[0_0_20px_rgba(0,255,0,0.6)]"></div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="h-40 bg-[#1a1a1a]/50 rounded-2xl border border-zinc-800/50 p-6">
+                          <div className="h-3 w-1/2 bg-zinc-800 rounded-full mb-6"></div>
+                          <div className="space-y-3">
+                            <div className="h-2 w-full bg-zinc-800/50 rounded-full"></div>
+                            <div className="h-2 w-full bg-zinc-800/50 rounded-full"></div>
+                            <div className="h-2 w-3/4 bg-zinc-800/50 rounded-full"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Benefits Section */}
+          <section className="py-32 bg-zinc-950 px-6 relative overflow-hidden">
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-neon/5 blur-[120px] rounded-full" />
+            <div className="max-w-7xl mx-auto space-y-20 relative z-10">
+              <div className="text-center space-y-4">
+                <h2 className="text-4xl md:text-5xl font-black font-display tracking-tight text-white">Por que escolher o <span className="text-neon">Controle de Frete?</span></h2>
+                <p className="text-zinc-500 max-w-2xl mx-auto text-lg">Desenvolvido para simplificar a complexidade da logística moderna com tecnologia de ponta.</p>
+              </div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                {[
+                  { icon: <Users className="w-6 h-6" />, title: "Multi-Filial", desc: "Gerencie diversas unidades da sua empresa em um único painel centralizado." },
+                  { icon: <TrendingUp className="w-6 h-6" />, title: "Financeiro", desc: "Controle total de faturamento, pagamentos a motoristas e lucro líquido." },
+                  { icon: <Activity className="w-6 h-6" />, title: "Tempo Real", desc: "Acompanhe o status de cada frete e carregamento instantaneamente." },
+                  { icon: <FileText className="w-6 h-6" />, title: "Relatórios", desc: "Exporte relatórios detalhados em PDF para análise e prestação de contas." }
+                ].map((benefit, i) => (
+                  <div key={i} className="bg-black/40 backdrop-blur-sm p-10 rounded-[2.5rem] border border-zinc-900 shadow-sm hover:border-neon/30 transition-all group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-neon/5 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-neon/10 transition-colors" />
+                    <div className="w-14 h-14 bg-zinc-900 text-neon rounded-2xl flex items-center justify-center mb-8 group-hover:bg-neon group-hover:text-black transition-all duration-500 transform group-hover:rotate-6">
+                      {benefit.icon}
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-3 font-display">{benefit.title}</h3>
+                    <p className="text-zinc-500 text-sm leading-relaxed font-sans">{benefit.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Features Section */}
+          <section className="py-24 px-6 bg-black">
+            <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
+              <div className="space-y-8">
+                <h2 className="text-5xl font-black tracking-tight leading-none text-white">Tudo o que você precisa para <span className="text-neon">escalar sua operação.</span></h2>
+                <div className="space-y-6">
+                  {[
+                    "Cadastro simplificado de fretes e carregamentos",
+                    "Gestão de motoristas e frotas por filial",
+                    "Cálculo automático de valores e margens",
+                    "Sistema de aprovação de novos usuários",
+                    "Painel administrativo master para controle total",
+                    "Interface moderna e responsiva (Mobile & Desktop)"
+                  ].map((feature, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <div className="w-6 h-6 bg-neon/10 text-neon rounded-full flex items-center justify-center flex-shrink-0 border border-neon/20">
+                        <Check className="w-4 h-4" />
+                      </div>
+                      <span className="text-zinc-400 font-medium">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+                <button 
+                  onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
+                  className="px-8 py-4 bg-neon text-black font-bold rounded-2xl hover:bg-neon/90 transition-all shadow-lg shadow-neon/20"
+                >
+                  Experimentar Agora
+                </button>
+              </div>
+              <div className="relative">
+                <div className="aspect-square bg-zinc-900 rounded-[4rem] overflow-hidden relative border border-zinc-800">
+                  <img 
+                    src="https://picsum.photos/seed/logistics-dark/800/800" 
+                    alt="Logística" 
+                    className="w-full h-full object-cover opacity-40 grayscale"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-neon/20 to-transparent"></div>
+                  <div className="absolute bottom-8 left-8 right-8 bg-zinc-900/90 backdrop-blur p-8 rounded-3xl border border-zinc-800 shadow-2xl">
+                    <div className="flex items-center gap-6">
+                      <div className="w-14 h-14 bg-neon rounded-2xl flex items-center justify-center text-black shadow-lg shadow-neon/30">
+                        <TrendingUp className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Crescimento Mensal</p>
+                        <p className="text-3xl font-black text-white">+42.5%</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* CTA Section */}
+          <section className="py-24 px-6 bg-black">
+            <div className="max-w-5xl mx-auto bg-zinc-900 rounded-[3rem] p-12 md:p-20 text-center space-y-8 relative overflow-hidden border border-zinc-800">
+              <div className="absolute top-0 left-0 w-full h-full opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-neon via-transparent to-transparent"></div>
+              <h2 className="text-4xl md:text-5xl font-black text-white leading-tight relative z-10">
+                Pronto para transformar sua logística?
+              </h2>
+              <p className="text-zinc-400 text-lg max-w-xl mx-auto relative z-10">
+                Junte-se a centenas de empresas que já otimizaram seus processos com o Controle de Frete.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 relative z-10">
+                <button 
+                  onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
+                  className="w-full sm:w-auto px-10 py-5 bg-neon text-black font-bold rounded-2xl hover:bg-neon/90 transition-all shadow-xl shadow-neon/30"
+                >
+                  Criar Minha Conta Grátis
+                </button>
+                <button 
+                  onClick={() => { setShowLanding(false); setAuthMode('login'); }}
+                  className="w-full sm:w-auto px-10 py-5 bg-zinc-800 text-white font-bold rounded-2xl hover:bg-zinc-700 transition-all"
+                >
+                  Falar com Consultor
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Footer */}
+          <footer className="py-12 border-t border-zinc-900 px-6 bg-black">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-neon rounded-lg flex items-center justify-center">
+                  <Truck className="text-black w-5 h-5" />
+                </div>
+                <span className="font-bold text-white">Controle de Frete</span>
+              </div>
+              <p className="text-zinc-600 text-sm">© 2026 Controle de Frete. Todos os direitos reservados.</p>
+              <div className="flex items-center gap-6">
+                <a href="#" className="text-sm font-bold text-zinc-500 hover:text-neon transition-colors">Termos</a>
+                <a href="#" className="text-sm font-bold text-zinc-500 hover:text-neon transition-colors">Privacidade</a>
+                <a href="#" className="text-sm font-bold text-zinc-500 hover:text-neon transition-colors">Suporte</a>
+              </div>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-6 selection:bg-neon selection:text-black font-sans">
+        <div className="max-w-md w-full bg-zinc-950 rounded-[3rem] shadow-2xl p-12 space-y-10 border border-zinc-900 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-neon shadow-[0_0_15px_rgba(0,255,0,0.5)]"></div>
+          
+          <button 
+            onClick={() => setShowLanding(true)}
+            className="absolute top-10 left-10 text-zinc-600 hover:text-neon transition-colors p-2 bg-zinc-900 rounded-xl"
+          >
+            <ArrowRight className="w-4 h-4 rotate-180" />
+          </button>
+
+          <div className="text-center space-y-3">
+            <div className="w-20 h-20 bg-neon rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-neon/40 transform rotate-3">
+              <Truck className="text-black w-10 h-10" />
+            </div>
+            <h1 className="text-3xl font-black text-white tracking-tighter uppercase">Controle de Frete</h1>
+            <p className="text-zinc-500 font-medium">{authMode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta neon'}</p>
           </div>
 
-          <form onSubmit={handleEmailAuth} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">E-mail</label>
+          <form onSubmit={handleEmailAuth} className="space-y-5">
+            {authMode === 'signup' && (
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em] ml-1">Nome Completo</label>
+                <input 
+                  type="text"
+                  required
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
+                  placeholder="Seu nome"
+                  value={authName}
+                  onChange={(e) => setAuthName(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em] ml-1">E-mail Corporativo</label>
               <input 
                 type="email"
                 required
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
                 placeholder="seu@email.com"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Senha</label>
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em] ml-1">Senha Segura</label>
               <input 
                 type="password"
                 required
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
                 placeholder="••••••••"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
@@ -1062,34 +1337,34 @@ function MainApp() {
             </div>
             <button
               type="submit"
-              className="w-full py-4 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200"
+              className="w-full py-5 bg-neon text-black font-black uppercase tracking-widest rounded-2xl hover:bg-neon/90 transition-all shadow-xl shadow-neon/20 active:scale-[0.98]"
             >
-              {authMode === 'login' ? 'Entrar' : 'Cadastrar'}
+              {authMode === 'login' ? 'Entrar no Sistema' : 'Finalizar Cadastro'}
             </button>
           </form>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-zinc-100"></span>
+              <span className="w-full border-t border-zinc-900"></span>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-zinc-400 font-bold">Ou</span>
+            <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
+              <span className="bg-zinc-950 px-4 text-zinc-600">Acesso Rápido</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <button
               onClick={handleLogin}
-              className="py-4 border-2 border-zinc-100 text-zinc-900 font-bold rounded-2xl hover:bg-zinc-50 transition-all flex items-center justify-center gap-3"
+              className="py-4 bg-zinc-900 border border-zinc-800 text-white font-bold rounded-2xl hover:border-neon/50 transition-all flex items-center justify-center gap-3 group"
             >
-              <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+              <img src="https://www.google.com/favicon.ico" className="w-5 h-5 grayscale group-hover:grayscale-0 transition-all" alt="Google" />
               Google
             </button>
             <button
               onClick={handleGithubLogin}
-              className="py-4 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 shadow-sm"
+              className="py-4 bg-zinc-900 border border-zinc-800 text-white font-bold rounded-2xl hover:border-neon/50 transition-all flex items-center justify-center gap-3 group"
             >
-              <Users className="w-5 h-5" />
+              <Users className="w-5 h-5 text-zinc-500 group-hover:text-neon transition-all" />
               GitHub
             </button>
           </div>
@@ -1097,20 +1372,20 @@ function MainApp() {
           <div className="text-center">
             <button 
               onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-              className="text-sm font-bold text-zinc-500 hover:text-zinc-900 transition-colors"
+              className="text-xs font-black uppercase tracking-widest text-zinc-600 hover:text-neon transition-colors"
             >
-              {authMode === 'login' ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Entre'}
+              {authMode === 'login' ? 'Solicitar Acesso' : 'Já possuo conta'}
             </button>
           </div>
 
           {loginError && (
-            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium text-center">
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold text-center">
               {loginError}
             </div>
           )}
           
-          <div className="text-center">
-            <p className="text-xs text-zinc-400 uppercase tracking-widest font-semibold">Sistema de Gestão de Transportes</p>
+          <div className="text-center pt-4">
+            <p className="text-[10px] text-zinc-700 uppercase tracking-[0.3em] font-black">Logística de Alta Performance</p>
           </div>
         </div>
       </div>
@@ -1278,15 +1553,15 @@ function MainApp() {
   const driversDescarregado = new Set(dashboardLoadings.filter(l => l.unloaded).map(l => l.driverName)).size;
 
   const funnelData = [
-    { value: totalPlannedWeight, name: 'Planejado', fill: '#27272a', sub: `${dashboardFreights.length} Fretes` },
-    { value: totalWeight, name: 'Carregado', fill: '#22c55e', sub: `${dashboardLoadings.length} Viagens (${driversCarregando} Motoristas)` },
-    { value: totalUnloadedWeight, name: 'Descarregado', fill: '#3b82f6', sub: `${totalCompleted} Finalizadas (${driversDescarregado} Motoristas)` },
+    { value: totalPlannedWeight, name: 'Planejado', fill: '#1a1a1a', sub: `${dashboardFreights.length} Fretes` },
+    { value: totalWeight, name: 'Carregado', fill: '#00FF00', sub: `${dashboardLoadings.length} Viagens (${driversCarregando} Motoristas)` },
+    { value: totalUnloadedWeight, name: 'Descarregado', fill: '#008800', sub: `${totalCompleted} Finalizadas (${driversDescarregado} Motoristas)` },
   ];
 
   const driverFunnelData = driverStats.slice(0, 5).map((d, idx) => ({
     value: d.weight,
     name: d.name,
-    fill: idx === 0 ? '#22c55e' : idx === 1 ? '#16a34a' : idx === 2 ? '#15803d' : idx === 3 ? '#166534' : '#14532d',
+    fill: idx === 0 ? '#00FF00' : idx === 1 ? '#00DD00' : idx === 2 ? '#00BB00' : idx === 3 ? '#009900' : '#007700',
     sub: totalWeight > 0 ? `${(d.weight / totalWeight * 100).toFixed(1)}% do total` : '0% do total'
   }));
 
@@ -1301,7 +1576,7 @@ function MainApp() {
   const freightFunnelData = freightPerformance.slice(0, 5).map((f, idx) => ({
     value: f.weight,
     name: f.name,
-    fill: idx === 0 ? '#3b82f6' : idx === 1 ? '#2563eb' : idx === 2 ? '#1d4ed8' : idx === 3 ? '#1e40af' : '#1e3a8a',
+    fill: idx === 0 ? '#00FF00' : idx === 1 ? '#00DD00' : idx === 2 ? '#00BB00' : idx === 3 ? '#009900' : '#007700',
     sub: totalWeight > 0 ? `${(f.weight / totalWeight * 100).toFixed(1)}% do total` : '0% do total'
   }));
 
@@ -1333,47 +1608,106 @@ function MainApp() {
   });
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-zinc-950 text-zinc-400' : 'bg-zinc-100 text-zinc-600'} font-sans flex flex-col md:flex-row transition-colors duration-300`}>
+    <div className={`min-h-screen ${darkMode ? 'bg-black text-zinc-400' : 'bg-zinc-100 text-zinc-600'} font-sans flex flex-col md:flex-row transition-colors duration-300 selection:bg-neon selection:text-black`}>
       {/* Sidebar */}
-      <aside className={`w-full md:w-64 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border-r p-6 space-y-8 md:sticky md:top-0 md:h-screen overflow-y-auto z-50 transition-colors`}>
-        <div className="flex items-center justify-between mb-10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-500 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/20">
-              <Package className="w-6 h-6 text-white" />
+      <aside className={`w-full md:w-72 ${darkMode ? 'bg-black border-zinc-900' : 'bg-white border-zinc-200'} border-r flex flex-col transition-all duration-500 relative z-20 md:sticky md:top-0 md:h-screen overflow-y-auto`}>
+        <div className="p-10 flex flex-col items-center">
+          <div className="relative group">
+            <div className="absolute -inset-4 bg-neon/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-all duration-700" />
+            <div className="w-20 h-20 bg-black border-2 border-neon rounded-[2rem] flex items-center justify-center shadow-[0_0_30px_rgba(0,255,0,0.15)] relative z-10 rotate-3 group-hover:rotate-0 transition-all duration-500">
+              <Truck className="w-10 h-10 text-neon" />
             </div>
-            <h1 className={`font-black tracking-tighter uppercase text-xl leading-none ${darkMode ? 'text-white' : 'text-zinc-900'}`}>Controle<br/><span className="text-green-500">Fretes</span></h1>
           </div>
-          <button 
-            onClick={() => setDarkMode(!darkMode)}
-            className={`p-2 rounded-xl transition-all ${darkMode ? 'bg-zinc-800 text-yellow-500 hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
-          >
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+          <div className="mt-8 text-center relative z-10">
+            <h1 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-black text-2xl tracking-tighter font-display uppercase leading-none`}>
+              Controle <span className="text-neon">Frete</span>
+            </h1>
+            <p className={`text-[10px] uppercase font-black tracking-[0.3em] ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} mt-1`}>
+              Logistics Systems
+            </p>
+          </div>
         </div>
-
-        <nav className="space-y-2">
-          <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} darkMode={darkMode} />
-          <SidebarItem icon={DollarSign} label="Faturamento" active={activeTab === 'faturamento'} onClick={() => setActiveTab('faturamento')} darkMode={darkMode} />
-          <SidebarItem icon={ClipboardList} label="Novo Frete" active={activeTab === 'freights'} onClick={() => setActiveTab('freights')} darkMode={darkMode} />
-          <SidebarItem icon={Truck} label="Motorista" active={activeTab === 'loadings'} onClick={() => setActiveTab('loadings')} darkMode={darkMode} />
-          <SidebarItem icon={Users} label="Funcionários" active={activeTab === 'employees'} onClick={() => setActiveTab('employees')} darkMode={darkMode} />
-          <SidebarItem icon={FileText} label="Relatórios" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} darkMode={darkMode} />
-          {userProfile?.role === 'master' && (
-            <SidebarItem icon={Activity} label="Gerenciamento" active={activeTab === 'management'} onClick={() => setActiveTab('management')} darkMode={darkMode} />
+        
+        <nav className="flex-1 px-6 space-y-2 mt-4">
+          <SidebarItem 
+            active={activeTab === 'dashboard'} 
+            icon={LayoutDashboard} 
+            label="Dashboard" 
+            onClick={() => setActiveTab('dashboard')}
+            darkMode={darkMode}
+          />
+          <SidebarItem 
+            active={activeTab === 'faturamento'} 
+            icon={DollarSign} 
+            label="Faturamento" 
+            onClick={() => setActiveTab('faturamento')}
+            darkMode={darkMode}
+          />
+          <SidebarItem 
+            active={activeTab === 'freights'} 
+            icon={ClipboardList} 
+            label="Novo Frete" 
+            onClick={() => setActiveTab('freights')}
+            darkMode={darkMode}
+          />
+          <SidebarItem 
+            active={activeTab === 'loadings'} 
+            icon={Truck} 
+            label="Motoristas" 
+            onClick={() => setActiveTab('loadings')}
+            darkMode={darkMode}
+          />
+          <SidebarItem 
+            active={activeTab === 'employees'} 
+            icon={Users} 
+            label="Funcionários" 
+            onClick={() => setActiveTab('employees')}
+            darkMode={darkMode}
+          />
+          <SidebarItem 
+            active={activeTab === 'reports'} 
+            icon={FileText} 
+            label="Relatórios" 
+            onClick={() => setActiveTab('reports')}
+            darkMode={darkMode}
+          />
+          {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
+            <SidebarItem 
+              active={activeTab === 'management'} 
+              icon={Activity} 
+              label="Gerenciamento" 
+              onClick={() => setActiveTab('management')}
+              darkMode={darkMode}
+            />
           )}
         </nav>
 
-        <div className="pt-10 border-t border-zinc-100 dark:border-zinc-800">
-          <div className="flex flex-col items-center gap-4">
-            <div className="text-center">
-              <p className={`text-xs font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{userProfile?.name}</p>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{userProfile?.role}</p>
+        <div className="p-6 mt-auto">
+          <div className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-zinc-50 border-zinc-200'} border rounded-[2rem] p-5 relative overflow-hidden group`}>
+            <div className="absolute top-0 right-0 w-24 h-24 bg-neon/5 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-neon/10 transition-all duration-500" />
+            <div className="flex items-center gap-4 relative z-10">
+              <div className="w-10 h-10 bg-zinc-900 rounded-xl flex items-center justify-center border border-zinc-800 group-hover:border-neon/30 transition-all">
+                <UserIcon className="w-5 h-5 text-neon" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs font-black truncate ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{userProfile?.name || 'Usuário'}</p>
+                <p className={`text-[9px] uppercase font-bold tracking-wider ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>{userProfile?.role || 'Acesso'}</p>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors p-1`}
+                title="Sair"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
+          </div>
+          <div className="mt-4 flex justify-center">
             <button 
-              onClick={handleLogout}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${darkMode ? 'bg-zinc-800 text-red-400 hover:bg-zinc-700' : 'bg-zinc-100 text-red-500 hover:bg-zinc-200'}`}
+              onClick={() => setDarkMode(!darkMode)}
+              className={`p-3 rounded-xl transition-all ${darkMode ? 'bg-zinc-900 text-yellow-500 hover:bg-zinc-800' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
             >
-              <LogOut className="w-4 h-4" /> Sair
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
           </div>
         </div>
@@ -1381,9 +1715,9 @@ function MainApp() {
 
       <main className="flex-1 p-6 md:p-10 space-y-10 overflow-y-auto">
         {userProfile?.role === 'master' && (
-          <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-4 rounded-2xl flex items-center justify-between shadow-sm mb-6`}>
+          <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} border p-4 rounded-2xl flex items-center justify-between shadow-sm mb-6 shadow-neon/5`}>
             <div className="flex items-center gap-3">
-              <Filter className="w-5 h-5 text-green-500" />
+              <Filter className="w-5 h-5 text-neon" />
               <span className={`text-sm font-bold ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>Visualizando Filial:</span>
               <select 
                 value={selectedBranchId}
@@ -1405,14 +1739,14 @@ function MainApp() {
         {activeTab === 'management' && userProfile?.role === 'master' && (
           <div className="space-y-10">
             <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} text-2xl font-black flex items-center gap-3`}>
-              <Activity className="w-8 h-8 text-green-500" /> Gerenciamento do Sistema
+              <Activity className="w-8 h-8 text-neon" /> Gerenciamento do Sistema
             </h2>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Branch Management */}
-              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-8 rounded-3xl shadow-sm space-y-6`}>
+              <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} border p-8 rounded-3xl shadow-sm space-y-6`}>
                 <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-zinc-900'} flex items-center gap-2`}>
-                  <Package className="w-5 h-5 text-green-500" /> Cadastrar Nova Filial
+                  <Package className="w-5 h-5 text-neon" /> Cadastrar Nova Filial
                 </h3>
                 <form onSubmit={handleCreateBranch} className="space-y-4">
                   <div className="flex flex-col gap-1.5">
@@ -1422,12 +1756,12 @@ function MainApp() {
                       value={newBranchName}
                       onChange={(e) => setNewBranchName(e.target.value)}
                       placeholder="Ex: Filial São Paulo"
-                      className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-500/50`}
+                      className={`w-full text-sm ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-neon/50`}
                     />
                   </div>
                   <button 
                     type="submit"
-                    className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 transition-all shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-neon text-black font-bold rounded-xl hover:bg-neon/90 transition-all shadow-lg shadow-neon/20 flex items-center justify-center gap-2"
                   >
                     <Plus className="w-4 h-4" /> Criar Filial
                   </button>
@@ -1437,9 +1771,9 @@ function MainApp() {
                   <h4 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-4`}>Filiais Ativas</h4>
                   <div className="space-y-2">
                     {branches.map(b => (
-                      <div key={b.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-zinc-950' : 'bg-zinc-50'}`}>
+                      <div key={b.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-black' : 'bg-zinc-50'}`}>
                         <span className={`text-sm font-medium ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>{b.name}</span>
-                        <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Ativa</span>
+                        <span className="text-[10px] font-bold text-neon uppercase tracking-widest">Ativa</span>
                       </div>
                     ))}
                   </div>
@@ -1447,9 +1781,9 @@ function MainApp() {
               </div>
 
               {/* User Management */}
-              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-8 rounded-3xl shadow-sm space-y-6`}>
+              <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} border p-8 rounded-3xl shadow-sm space-y-6`}>
                 <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-zinc-900'} flex items-center gap-2`}>
-                  <Users className="w-5 h-5 text-blue-500" /> Cadastrar Novo Usuário
+                  <Users className="w-5 h-5 text-neon" /> Cadastrar Novo Usuário
                 </h3>
                 <form onSubmit={handleCreateUser} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1460,7 +1794,7 @@ function MainApp() {
                         value={newUserName}
                         onChange={(e) => setNewUserName(e.target.value)}
                         placeholder="Nome do usuário"
-                        className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                        className={`w-full text-sm ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-neon/50`}
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -1470,7 +1804,7 @@ function MainApp() {
                         value={newUserEmail}
                         onChange={(e) => setNewUserEmail(e.target.value)}
                         placeholder="email@exemplo.com"
-                        className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                        className={`w-full text-sm ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-neon/50`}
                       />
                     </div>
                   </div>
@@ -1480,7 +1814,7 @@ function MainApp() {
                       <select 
                         value={newUserRole}
                         onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'user')}
-                        className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                        className={`w-full text-sm ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-neon/50`}
                       >
                         <option value="user">Usuário Comum</option>
                         <option value="admin">Administrador de Filial</option>
@@ -1491,7 +1825,7 @@ function MainApp() {
                       <select 
                         value={newUserBranchId}
                         onChange={(e) => setNewUserBranchId(e.target.value)}
-                        className={`w-full text-sm ${darkMode ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                        className={`w-full text-sm ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'} border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-neon/50`}
                       >
                         <option value="">Selecione uma filial</option>
                         {branches.map(b => (
@@ -1502,7 +1836,7 @@ function MainApp() {
                   </div>
                   <button 
                     type="submit"
-                    className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-neon text-black font-bold rounded-xl hover:bg-neon/90 transition-all shadow-lg shadow-neon/20 flex items-center justify-center gap-2"
                   >
                     <Plus className="w-4 h-4" /> Criar Usuário
                   </button>
@@ -1513,14 +1847,14 @@ function MainApp() {
                     <h4 className={`text-xs font-bold uppercase tracking-widest ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-4`}>Usuários Cadastrados</h4>
                     <div className="space-y-2 max-h-60 overflow-y-auto">
                       {allUsers.map(u => (
-                        <div key={u.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-zinc-950' : 'bg-zinc-50'}`}>
+                        <div key={u.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-black' : 'bg-zinc-50'}`}>
                           <div>
                             <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{u.name}</p>
                             <p className="text-[10px] text-zinc-500">{u.email}</p>
                           </div>
                           <div className="text-right flex items-center gap-3">
                             <div>
-                              <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{u.role}</p>
+                              <p className="text-[10px] font-bold text-neon uppercase tracking-widest">{u.role}</p>
                               <p className="text-[9px] text-zinc-400">{branches.find(b => b.id === u.branchId)?.name || 'Master'}</p>
                             </div>
                             {u.role !== 'master' && (
@@ -1546,17 +1880,17 @@ function MainApp() {
           <div className="space-y-10">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} text-2xl font-black flex items-center gap-3`}>
-                <DollarSign className="w-8 h-8 text-green-500" /> Dashboard de Faturamento
+                <DollarSign className="w-8 h-8 text-neon" /> Dashboard de Faturamento
               </h2>
               <button 
                 onClick={exportBillingToPDF}
-                className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-2xl font-bold hover:bg-green-500 transition-all shadow-lg shadow-green-900/20"
+                className="flex items-center gap-2 px-6 py-2.5 bg-neon text-black rounded-2xl font-bold hover:bg-neon/80 transition-all shadow-lg shadow-neon/20"
               >
                 <Download className="w-4 h-4" /> Exportar PDF
               </button>
             </div>
 
-            <div className={`${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'} border p-5 rounded-3xl flex flex-wrap items-end gap-4 shadow-sm`}>
+            <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-zinc-50 border-zinc-200'} border p-5 rounded-3xl flex flex-wrap items-end gap-4 shadow-sm`}>
               <div className="flex items-center gap-2 mr-2 mb-8">
                 <Filter className="w-4 h-4 text-zinc-400" />
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros de Faturamento</span>
@@ -1569,7 +1903,7 @@ function MainApp() {
                   <select 
                     value={billingFilterFreightId}
                     onChange={(e) => setBillingFilterFreightId(e.target.value)}
-                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50 appearance-none`}
+                    className={`w-full text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50 appearance-none`}
                   >
                     <option value="">Todos os Pedidos</option>
                     {freights.map(f => (
@@ -1585,7 +1919,7 @@ function MainApp() {
                   type="date"
                   value={billingFilterStartDate}
                   onChange={(e) => setBillingFilterStartDate(e.target.value)}
-                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  className={`text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
                 />
               </div>
 
@@ -1595,7 +1929,7 @@ function MainApp() {
                   type="date"
                   value={billingFilterEndDate}
                   onChange={(e) => setBillingFilterEndDate(e.target.value)}
-                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500/50`}
+                  className={`text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
                 />
               </div>
 
@@ -1615,26 +1949,14 @@ function MainApp() {
             </div>
 
             <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-6 rounded-3xl border shadow-sm`}>
-                <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>Total Recebido</span>
-                <div className="text-2xl font-black text-green-600">R$ {totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-              </div>
-              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-6 rounded-3xl border shadow-sm`}>
-                <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>Total Pago</span>
-                <div className="text-2xl font-black text-red-500">R$ {totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-              </div>
-              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-6 rounded-3xl border shadow-sm`}>
-                <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>Lucro Líquido</span>
-                <div className="text-2xl font-black text-blue-600">R$ {netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-              </div>
-              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-6 rounded-3xl border shadow-sm`}>
-                <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>Margem</span>
-                <div className={`text-2xl font-black ${profitMargin > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{profitMargin.toFixed(1)}%</div>
-              </div>
+              <SummaryCard label="Total Recebido" value={`R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-neon" darkMode={darkMode} />
+              <SummaryCard label="Total Pago" value={`R$ ${totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-red-500" darkMode={darkMode} />
+              <SummaryCard label="Lucro Líquido" value={`R$ ${netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-neon" darkMode={darkMode} />
+              <SummaryCard label="Margem" value={`${profitMargin.toFixed(1)}%`} color={profitMargin > 0 ? "text-neon" : "text-red-500"} darkMode={darkMode} />
             </section>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
+              <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
                 <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6`}>Distribuição Financeira</h3>
                 <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1651,11 +1973,11 @@ function MainApp() {
                         paddingAngle={5}
                         dataKey="value"
                       >
-                        <Cell fill="#3b82f6" />
+                        <Cell fill="#00FF00" />
                         <Cell fill="#ef4444" />
                       </Pie>
                       <Tooltip 
-                        contentStyle={{ backgroundColor: darkMode ? '#18181b' : '#ffffff', border: `1px solid ${darkMode ? '#27272a' : '#e5e7eb'}`, borderRadius: '12px' }}
+                        contentStyle={{ backgroundColor: darkMode ? '#000000' : '#ffffff', border: `1px solid ${darkMode ? '#00FF00' : '#e5e7eb'}`, borderRadius: '12px' }}
                         itemStyle={{ color: darkMode ? '#ffffff' : '#111827' }}
                         formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                       />
@@ -1665,7 +1987,7 @@ function MainApp() {
                 </div>
               </div>
 
-              <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
+              <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
                 <h3 className={`${darkMode ? 'text-white' : 'text-black'} font-black mb-6`}>Top 5 Fretes por Receita</h3>
                 <div className="space-y-4">
                   {freights
@@ -1679,9 +2001,9 @@ function MainApp() {
                     .sort((a, b) => b.rev - a.rev)
                     .slice(0, 5)
                     .map((f, idx) => (
-                      <div key={f.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
+                      <div key={f.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-black border dark:border-zinc-800">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs">
+                          <div className="w-8 h-8 rounded-lg bg-neon/10 flex items-center justify-center text-neon font-bold text-xs">
                             #{idx + 1}
                           </div>
                           <div>
@@ -1689,7 +2011,7 @@ function MainApp() {
                             <div className={`text-[10px] font-bold ${darkMode ? 'text-zinc-400' : 'text-black'}`}>{f.product}</div>
                           </div>
                         </div>
-                        <div className={`text-sm font-black ${darkMode ? 'text-green-500' : 'text-black'}`}>
+                        <div className={`text-sm font-black ${darkMode ? 'text-neon' : 'text-black'}`}>
                           R$ {f.rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </div>
                       </div>
@@ -1703,9 +2025,9 @@ function MainApp() {
               </div>
             </div>
 
-            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
+            <section className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
               <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                <ClipboardList className="w-5 h-5 text-orange-500" /> Resumo Financeiro por Pedido (Frete)
+                <ClipboardList className="w-5 h-5 text-neon" /> Resumo Financeiro por Pedido (Frete)
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -1743,10 +2065,10 @@ function MainApp() {
                               <div className="text-[10px] text-zinc-500">{f.product} - {f.origin} para {f.destination}</div>
                             </td>
                             <td className={`py-4 text-sm ${darkMode ? 'text-zinc-300' : 'text-zinc-600'}`}>{totalWeight.toLocaleString()} kg</td>
-                            <td className="py-4 text-sm font-bold text-blue-500">R$ {revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                            <td className="py-4 text-sm font-bold text-orange-500">R$ {payout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                            <td className={`py-4 text-sm font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>R$ {profit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                            <td className={`py-4 text-sm font-black ${margin >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{margin.toFixed(1)}%</td>
+                            <td className="py-4 text-sm font-bold text-neon">R$ {revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className="py-4 text-sm font-bold text-neon/80">R$ {payout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className={`py-4 text-sm font-bold ${profit >= 0 ? 'text-neon' : 'text-red-500'}`}>R$ {profit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className={`py-4 text-sm font-black ${margin >= 0 ? 'text-neon' : 'text-red-500'}`}>{margin.toFixed(1)}%</td>
                           </tr>
                         );
                       })}
@@ -1755,9 +2077,9 @@ function MainApp() {
               </div>
             </section>
 
-            <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
+            <section className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
               <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                <Truck className="w-5 h-5 text-blue-500" /> Detalhamento por Motorista
+                <Truck className="w-5 h-5 text-neon" /> Detalhamento por Motorista
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -1788,9 +2110,9 @@ function MainApp() {
                             <div className="text-[10px] text-zinc-500">{freight?.description}</div>
                           </td>
                           <td className="py-4 font-mono">{l.weight.toLocaleString()} kg</td>
-                          <td className="py-4 text-blue-500 font-bold">R$ {rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          <td className="py-4 text-orange-500 font-bold">R$ {pay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          <td className="py-4 text-green-600 font-black">R$ {prof.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-4 text-neon font-bold">R$ {rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-4 text-neon/80 font-bold">R$ {pay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-4 text-neon font-black">R$ {prof.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                           <td className="py-4 text-xs">{l.manifestoDate ? format(parseISO(l.manifestoDate), 'dd/MM/yyyy') : '-'}</td>
                         </tr>
                       );
@@ -1817,7 +2139,7 @@ function MainApp() {
                   type="date"
                   value={dashboardFilterStartDate}
                   onChange={(e) => setDashboardFilterStartDate(e.target.value)}
-                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
                 />
               </div>
 
@@ -1827,7 +2149,7 @@ function MainApp() {
                   type="date"
                   value={dashboardFilterEndDate}
                   onChange={(e) => setDashboardFilterEndDate(e.target.value)}
-                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
                 />
               </div>
 
@@ -1847,16 +2169,16 @@ function MainApp() {
 
             {/* Summary */}
             <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <SummaryCard label="Peso Total" value={`${totalWeight.toLocaleString()} kg`} color="text-green-600" darkMode={darkMode} />
-              <SummaryCard label="Fretes Abertos" value={openFreights.toString()} color="text-blue-600" darkMode={darkMode} />
-              <SummaryCard label="Manifesto Pendente" value={pendingManifesto.toString()} color="text-orange-600" darkMode={darkMode} />
-              <SummaryCard label="Finalizados" value={totalCompleted.toString()} color={darkMode ? 'text-white' : 'text-zinc-900'} darkMode={darkMode} />
+              <SummaryCard label="Peso Total" value={`${totalWeight.toLocaleString()} kg`} color="text-neon" darkMode={darkMode} />
+              <SummaryCard label="Fretes Abertos" value={openFreights.toString()} color="text-neon" darkMode={darkMode} />
+              <SummaryCard label="Manifesto Pendente" value={pendingManifesto.toString()} color="text-neon" darkMode={darkMode} />
+              <SummaryCard label="Finalizados" value={totalCompleted.toString()} color="text-neon" darkMode={darkMode} />
             </section>
 
             {userProfile?.role === 'master' && !selectedBranchId && (
-              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
+              <section className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
                 <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                  <Package className="w-5 h-5 text-green-500" /> Resumo por Filial
+                  <Package className="w-5 h-5 text-neon" /> Resumo por Filial
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {branches.map(branch => {
@@ -1868,10 +2190,10 @@ function MainApp() {
                     }, 0);
                     
                     return (
-                      <div key={branch.id} className={`${darkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-zinc-50 border-zinc-100'} border p-5 rounded-2xl transition-colors`}>
+                      <div key={branch.id} className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-zinc-50 border-zinc-100'} border p-5 rounded-2xl transition-colors`}>
                         <div className="flex justify-between items-start mb-4">
                           <h4 className={`font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{branch.name}</h4>
-                          <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Ativa</span>
+                          <span className="text-[10px] font-bold text-neon uppercase tracking-widest">Ativa</span>
                         </div>
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
@@ -1880,7 +2202,7 @@ function MainApp() {
                           </div>
                           <div className="flex justify-between items-center">
                             <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Receita</span>
-                            <span className="text-xs font-bold text-blue-500">R$ {branchRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-xs font-bold text-neon">R$ {branchRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Viagens</span>
@@ -1896,21 +2218,21 @@ function MainApp() {
 
             {/* Faturamento */}
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <SummaryCard label="Total Recebido (Empresa)" value={`R$ ${dashboardTotalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-green-600" darkMode={darkMode} />
+              <SummaryCard label="Total Recebido (Empresa)" value={`R$ ${dashboardTotalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-neon" darkMode={darkMode} />
               <SummaryCard label="Total Pago (Motoristas)" value={`R$ ${dashboardTotalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-red-500" darkMode={darkMode} />
-              <SummaryCard label="Lucro Líquido" value={`R$ ${dashboardNetProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-blue-600" darkMode={darkMode} />
-              <SummaryCard label="Margem de Lucro" value={`${dashboardProfitMargin.toFixed(1)}%`} color={dashboardProfitMargin > 0 ? "text-emerald-500" : "text-red-500"} darkMode={darkMode} />
+              <SummaryCard label="Lucro Líquido" value={`R$ ${dashboardNetProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-neon" darkMode={darkMode} />
+              <SummaryCard label="Margem de Lucro" value={`${dashboardProfitMargin.toFixed(1)}%`} color={dashboardProfitMargin > 0 ? "text-neon" : "text-red-500"} darkMode={darkMode} />
             </section>
 
             {/* Performance Dashboard */}
             {(freightPerformance.length > 0 || loadings.length > 0) && (
-              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
+              <section className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
                 <div className="flex flex-col lg:flex-row gap-12">
                   {/* Funnel Section */}
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-8">
                       <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
-                        <Activity className="w-5 h-5 text-green-500" /> Fluxo de Operação (Funil)
+                        <Activity className="w-5 h-5 text-neon" /> Fluxo de Operação (Funil)
                       </h2>
                       <div className="flex gap-4">
                         <div className="flex items-center gap-2">
@@ -1918,11 +2240,11 @@ function MainApp() {
                           <span className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase font-bold`}>Planejado</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <div className="w-2 h-2 rounded-full bg-neon" />
                           <span className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase font-bold`}>Carregado</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-blue-500" />
+                          <div className="w-2 h-2 rounded-full bg-neon/60" />
                           <span className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase font-bold`}>Descarregado</span>
                         </div>
                       </div>
@@ -1969,13 +2291,13 @@ function MainApp() {
                     {/* Driver Funnel */}
                     <div className="mt-12">
                       <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-8 flex items-center gap-2`}>
-                        <Users className="w-5 h-5 text-blue-500" /> Top 5 Motoristas (Funil de Volume)
+                        <Users className="w-5 h-5 text-neon" /> Top 5 Motoristas (Funil de Volume)
                       </h2>
                       <div className="h-64 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                           <FunnelChart>
                             <Tooltip 
-                              contentStyle={{ backgroundColor: darkMode ? '#18181b' : '#ffffff', border: `1px solid ${darkMode ? '#27272a' : '#e5e7eb'}`, borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                              contentStyle={{ backgroundColor: darkMode ? '#000000' : '#ffffff', border: `1px solid ${darkMode ? '#00FF00' : '#e5e7eb'}`, borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                               itemStyle={{ color: darkMode ? '#ffffff' : '#111827', fontWeight: 'bold' }}
                               formatter={(value: number, name: string, props: any) => [
                                 `${value.toLocaleString()} kg`, 
@@ -2005,13 +2327,13 @@ function MainApp() {
                     {/* Freight Funnel */}
                     <div className="mt-12">
                       <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-8 flex items-center gap-2`}>
-                        <Package className="w-5 h-5 text-purple-500" /> Top 5 Fretes (Funil de Volume)
+                        <Package className="w-5 h-5 text-neon" /> Top 5 Fretes (Funil de Volume)
                       </h2>
                       <div className="h-64 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                           <FunnelChart>
                             <Tooltip 
-                              contentStyle={{ backgroundColor: darkMode ? '#18181b' : '#ffffff', border: `1px solid ${darkMode ? '#27272a' : '#e5e7eb'}`, borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                              contentStyle={{ backgroundColor: darkMode ? '#000000' : '#ffffff', border: `1px solid ${darkMode ? '#00FF00' : '#e5e7eb'}`, borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                               itemStyle={{ color: darkMode ? '#ffffff' : '#111827', fontWeight: 'bold' }}
                               formatter={(value: number, name: string, props: any) => [
                                 `${value.toLocaleString()} kg`, 
@@ -2042,18 +2364,18 @@ function MainApp() {
                   {/* Metrics Sidebar */}
                   <div className="lg:w-96 space-y-6">
                     <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                      <TrendingUp className="w-5 h-5 text-blue-500" /> Inteligência de Dados
+                      <TrendingUp className="w-5 h-5 text-neon" /> Inteligência de Dados
                     </h2>
                     
                     <div className="grid grid-cols-2 gap-4">
-                      <div className={`${darkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
+                      <div className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
                         <div className="flex items-center gap-2 mb-1">
                           <Users className={`w-3 h-3 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
                           <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Motoristas</span>
                         </div>
                         <div className={`text-xl font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{uniqueDrivers}</div>
                       </div>
-                      <div className={`${darkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
+                      <div className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
                         <div className="flex items-center gap-2 mb-1">
                           <Truck className={`w-3 h-3 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
                           <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Viagens</span>
@@ -2063,7 +2385,7 @@ function MainApp() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className={`${darkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
+                      <div className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
                         <div className="flex items-center gap-3 mb-2">
                           <Weight className={`w-4 h-4 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
                           <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Média por Caminhão</span>
@@ -2073,28 +2395,28 @@ function MainApp() {
                       </div>
 
                       {topDriver && (
-                        <div className={`${darkMode ? 'bg-green-500/10 border-green-500/20' : 'bg-green-500/5 border-green-500/10'} p-4 rounded-2xl border transition-colors`}>
+                        <div className={`${darkMode ? 'bg-neon/10 border-neon/20' : 'bg-neon/5 border-neon/10'} p-4 rounded-2xl border transition-colors`}>
                           <div className="flex items-center gap-3 mb-3">
-                            <div className="p-1.5 bg-green-500/20 rounded-lg">
-                              <UserIcon className="w-4 h-4 text-green-500" />
+                            <div className="p-1.5 bg-neon/20 rounded-lg">
+                              <UserIcon className="w-4 h-4 text-neon" />
                             </div>
-                            <span className="text-[10px] uppercase font-bold text-green-600">Melhor Desempenho</span>
+                            <span className="text-[10px] uppercase font-bold text-neon">Melhor Desempenho</span>
                           </div>
                           <div className={`text-lg font-black ${darkMode ? 'text-white' : 'text-zinc-900'} truncate`}>{topDriver.name}</div>
-                          <div className={`flex justify-between items-center mt-2 pt-2 border-t ${darkMode ? 'border-green-500/20' : 'border-green-500/10'}`}>
+                          <div className={`flex justify-between items-center mt-2 pt-2 border-t ${darkMode ? 'border-neon/20' : 'border-neon/10'}`}>
                             <div className="text-center">
                               <div className={`text-[9px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase`}>Viagens</div>
                               <div className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{topDriver.count}</div>
                             </div>
                             <div className="text-center">
                               <div className={`text-[9px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase`}>Total</div>
-                              <div className="text-sm font-bold text-green-600">{topDriver.weight.toLocaleString()} kg</div>
+                              <div className="text-sm font-bold text-neon">{topDriver.weight.toLocaleString()} kg</div>
                             </div>
                           </div>
                         </div>
                       )}
 
-                      <div className={`${darkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
+                      <div className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
                         <div className="flex items-center gap-3 mb-2">
                           <BarChart2 className={`w-4 h-4 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
                           <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Taxa de Conclusão</span>
@@ -2105,9 +2427,9 @@ function MainApp() {
                           </div>
                           <div className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-1.5`}>do planejado</div>
                         </div>
-                        <div className={`w-full h-1.5 ${darkMode ? 'bg-zinc-700' : 'bg-zinc-100'} rounded-full mt-3 overflow-hidden`}>
+                        <div className={`w-full h-1.5 ${darkMode ? 'bg-zinc-900' : 'bg-zinc-100'} rounded-full mt-3 overflow-hidden`}>
                           <div 
-                            className="h-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]" 
+                            className="h-full bg-neon shadow-[0_0_10px_rgba(0,255,0,0.3)]" 
                             style={{ width: `${totalPlannedWeight > 0 ? (totalWeight / totalPlannedWeight) * 100 : 0}%` }}
                           />
                         </div>
@@ -2149,22 +2471,26 @@ function MainApp() {
         )}
 
         {activeTab === 'freights' && (
-          <>
+          <div className="space-y-10">
             {/* Freight Registration */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
-              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors mb-10`}>
-                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                  <ClipboardList className="w-5 h-5 text-blue-500" /> Novo Frete
+              <section className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-white border-zinc-200'} border rounded-[2.5rem] p-10 shadow-sm transition-colors relative overflow-hidden`}>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-neon/5 blur-[100px] rounded-full -mr-32 -mt-32" />
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-black text-xl mb-8 flex items-center gap-3 relative z-10 font-display`}>
+                  <div className="w-10 h-10 bg-neon/10 rounded-xl flex items-center justify-center">
+                    <ClipboardList className="w-5 h-5 text-neon" />
+                  </div>
+                  Novo Frete
                 </h2>
-                <form onSubmit={handleSubmitFreight} className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                <form onSubmit={handleSubmitFreight} className="grid grid-cols-1 md:grid-cols-6 gap-6 relative z-10">
                   <div className="md:col-span-2 space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Descrição</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Descrição</label>
                     <input 
                       type="text" 
                       placeholder="Ex: Soja - Fazenda Sol"
                       value={freightDesc}
                       onChange={(e) => setFreightDesc(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 px-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2174,7 +2500,7 @@ function MainApp() {
                       placeholder="Ex: Soja"
                       value={freightProduct}
                       onChange={(e) => setFreightProduct(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2184,7 +2510,7 @@ function MainApp() {
                       placeholder="Ex: Sorriso-MT"
                       value={freightOrigin}
                       onChange={(e) => setFreightOrigin(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2194,7 +2520,7 @@ function MainApp() {
                       placeholder="Ex: Santos-SP"
                       value={freightDestination}
                       onChange={(e) => setFreightDestination(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2204,7 +2530,7 @@ function MainApp() {
                       placeholder="0"
                       value={freightTotalWeight}
                       onChange={(e) => setFreightTotalWeight(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2215,7 +2541,7 @@ function MainApp() {
                       placeholder="0.00"
                       value={freightValorFrete}
                       onChange={(e) => setFreightValorFrete(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2226,12 +2552,12 @@ function MainApp() {
                       placeholder="0.00"
                       value={freightValorPagoMotorista}
                       onChange={(e) => setFreightValorPagoMotorista(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Total Estimado (R$)</label>
-                    <div className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400'} border rounded-xl py-3 px-4 text-sm`}>
+                    <div className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400'} border rounded-xl py-3 px-4 text-sm`}>
                       R$ {((Number(freightTotalWeight) / 1000) * Number(freightValorFrete) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
@@ -2242,13 +2568,13 @@ function MainApp() {
                       value={freightObservations}
                       onChange={(e) => setFreightObservations(e.target.value)}
                       rows={2}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all resize-none`}
                     />
                   </div>
-                  <div className="md:col-span-6 flex justify-end">
+                  <div className="md:col-span-6 flex justify-end pt-4">
                     <button 
                       disabled={isSubmittingFreight}
-                      className="w-full md:w-auto px-12 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                      className="w-full md:w-auto px-12 bg-neon hover:bg-neon/90 disabled:opacity-50 text-black font-black uppercase tracking-widest py-5 rounded-2xl transition-all shadow-xl shadow-neon/20 active:scale-95"
                     >
                       {isSubmittingFreight ? 'Salvando...' : 'Criar Frete'}
                     </button>
@@ -2258,11 +2584,13 @@ function MainApp() {
             )}
 
             {/* Freights List */}
-            <section className="space-y-6">
-              <div className={`${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'} border p-5 rounded-3xl flex flex-wrap items-end gap-4 shadow-sm`}>
-                <div className="flex items-center gap-2 mr-2 mb-8">
-                  <Filter className="w-4 h-4 text-zinc-400" />
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros de Frete</span>
+            <section className="space-y-8">
+              <div className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-zinc-50 border-zinc-200'} border p-6 rounded-[2rem] flex flex-wrap items-end gap-6 shadow-sm`}>
+                <div className="flex items-center gap-3 mr-4 mb-10">
+                  <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">
+                    <Filter className="w-4 h-4 text-neon" />
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Filtros de Frete</span>
                 </div>
 
                 <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
@@ -2274,7 +2602,7 @@ function MainApp() {
                       placeholder="Descrição, produto, origem..."
                       value={freightSearch}
                       onChange={(e) => setFreightSearch(e.target.value)}
-                      className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                      className={`w-full text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
                     />
                   </div>
                 </div>
@@ -2284,7 +2612,7 @@ function MainApp() {
                   <select 
                     value={freightFilterStatus}
                     onChange={(e) => setFreightFilterStatus(e.target.value as any)}
-                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none`}
+                    className={`w-full text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50 appearance-none`}
                   >
                     <option value="Todos">Todos Status</option>
                     <option value="Aberto">Aberto</option>
@@ -2298,7 +2626,7 @@ function MainApp() {
                     type="date"
                     value={freightFilterDate}
                     onChange={(e) => setFreightFilterDate(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                    className={`text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
                   />
                 </div>
 
@@ -2319,11 +2647,11 @@ function MainApp() {
 
               <div className="flex items-center justify-between px-2">
                 <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
-                  <TrendingUp className="w-5 h-5 text-blue-500" /> Fretes em Andamento
+                  <TrendingUp className="w-5 h-5 text-neon" /> Fretes em Andamento
                 </h2>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {filteredFreights.map((f) => {
                   const relatedLoadings = loadings.filter(l => l.freightId === f.id);
                   const loadedWeight = relatedLoadings.reduce((acc, curr) => acc + curr.weight, 0);
@@ -2333,13 +2661,14 @@ function MainApp() {
                     <div 
                       key={f.id} 
                       onClick={() => setViewingFreightId(f.id)}
-                      className={`${darkMode ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-700' : 'bg-white border-zinc-200 hover:border-zinc-300'} border rounded-3xl p-6 space-y-4 shadow-sm transition-all cursor-pointer group`}
+                      className={`${darkMode ? 'bg-zinc-950 border-zinc-900 hover:border-neon/30' : 'bg-white border-zinc-200 hover:border-zinc-300'} border rounded-[2.5rem] p-8 space-y-6 shadow-sm transition-all cursor-pointer group relative overflow-hidden`}
                     >
+                      <div className="absolute top-0 left-0 w-1.5 h-full bg-neon/10 group-hover:bg-neon transition-all duration-500" />
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>{f.description}</h3>
-                            <Eye className={`w-3 h-3 ${darkMode ? 'text-zinc-700 group-hover:text-blue-500' : 'text-zinc-300 group-hover:text-blue-500'} transition-colors`} />
+                            <Eye className={`w-3 h-3 ${darkMode ? 'text-zinc-700 group-hover:text-neon' : 'text-zinc-300 group-hover:text-neon'} transition-colors`} />
                           </div>
                           <p className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>{f.product} • {f.totalWeight.toLocaleString()} kg total</p>
                           <div className={`flex items-center gap-2 mt-1 text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
@@ -2356,7 +2685,7 @@ function MainApp() {
                                   e.stopPropagation();
                                   startEditingFreight(f);
                                 }}
-                                className={`${darkMode ? 'text-zinc-700 hover:text-blue-500' : 'text-zinc-300 hover:text-blue-500'} transition-colors p-1`}
+                                className={`${darkMode ? 'text-zinc-700 hover:text-neon' : 'text-zinc-300 hover:text-neon'} transition-colors p-1`}
                                 title="Editar Frete"
                               >
                                 <FileText className="w-4 h-4" />
@@ -2380,11 +2709,11 @@ function MainApp() {
                       <div className="space-y-2">
                         <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
                           <span className={`${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Progresso</span>
-                          <span className="text-blue-600">{loadedWeight.toLocaleString()} / {f.totalWeight.toLocaleString()} kg</span>
+                          <span className="text-neon">{loadedWeight.toLocaleString()} / {f.totalWeight.toLocaleString()} kg</span>
                         </div>
                         <div className={`h-2 ${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'} rounded-full overflow-hidden`}>
                           <div 
-                            className="h-full bg-blue-500 transition-all duration-500" 
+                            className="h-full bg-neon transition-all duration-500" 
                             style={{ width: `${progress}%` }}
                           />
                         </div>
@@ -2398,12 +2727,12 @@ function MainApp() {
                           </div>
                           <div>
                             <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-0.5`}>Lucro</span>
-                            <div className={`text-xs font-bold ${((loadedWeight / 1000) * ((f.valorFrete || 0) - (f.valorPagoMotorista || 0))) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                            <div className={`text-xs font-bold ${((loadedWeight / 1000) * ((f.valorFrete || 0) - (f.valorPagoMotorista || 0))) >= 0 ? 'text-neon' : 'text-red-500'}`}>
                               R$ {((loadedWeight / 1000) * ((f.valorFrete || 0) - (f.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </div>
                           </div>
                         </div>
-                        <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${f.status === 'Aberto' ? 'bg-blue-500/10 text-blue-500' : 'bg-green-500/10 text-green-500'}`}>
+                        <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${f.status === 'Aberto' ? 'bg-neon/10 text-neon' : 'bg-green-500/10 text-green-500'}`}>
                           {f.status}
                         </div>
                       </div>
@@ -2414,7 +2743,7 @@ function MainApp() {
                           <span>{relatedLoadings.length} motoristas vinculados</span>
                         </div>
                         {f.observations && (
-                          <div className="flex items-center gap-1 text-blue-500">
+                          <div className="flex items-center gap-1 text-neon">
                             <FileText className="w-3 h-3" />
                             <span>Obs</span>
                           </div>
@@ -2437,17 +2766,21 @@ function MainApp() {
           <>
             {/* Loading Registration */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
-              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
-                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                  <Plus className="w-5 h-5 text-green-500" /> Cadastrar Motorista
+              <section className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-white border-zinc-200'} border rounded-[2.5rem] p-10 shadow-sm transition-colors mb-10 relative overflow-hidden`}>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-neon/5 blur-[100px] rounded-full -mr-32 -mt-32" />
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-black text-xl mb-8 flex items-center gap-3 relative z-10 font-display`}>
+                  <div className="w-10 h-10 bg-neon/10 rounded-xl flex items-center justify-center">
+                    <Plus className="w-5 h-5 text-neon" />
+                  </div>
+                  Cadastrar Motorista
                 </h2>
-                <form onSubmit={handleSubmitLoading} className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Selecionar Frete</label>
+                <form onSubmit={handleSubmitLoading} className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 relative z-10">
+                  <div className="md:col-span-2 space-y-2">
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Selecionar Frete</label>
                     <select 
                       value={selectedFreightId}
                       onChange={(e) => setSelectedFreightId(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 px-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5 appearance-none`}
                     >
                       <option value="">Selecione...</option>
                       {freights.filter(f => f.status === 'Aberto').map(f => (
@@ -2456,7 +2789,7 @@ function MainApp() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Motorista</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Motorista</label>
                     <div className="relative">
                       <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                       <input 
@@ -2464,12 +2797,12 @@ function MainApp() {
                         placeholder="Nome"
                         value={driverName}
                         onChange={(e) => setDriverName(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Placa</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Placa</label>
                     <div className="relative">
                       <Truck className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                       <input 
@@ -2477,12 +2810,12 @@ function MainApp() {
                         placeholder="ABC-1234"
                         value={plate}
                         onChange={(e) => setPlate(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Peso (kg)</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Peso (kg)</label>
                     <div className="relative">
                       <Weight className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                       <input 
@@ -2490,18 +2823,18 @@ function MainApp() {
                         placeholder="0"
                         value={weight}
                         onChange={(e) => setWeight(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Quem deu a ordem</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Quem deu a ordem</label>
                     <div className="relative">
                       <UserIcon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'} z-10`} />
                       <select 
                         value={orderGiverId}
                         onChange={(e) => setOrderGiverId(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all appearance-none`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5 appearance-none`}
                       >
                         <option value="">Selecione...</option>
                         {employees.map(emp => (
@@ -2511,7 +2844,7 @@ function MainApp() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Vlr Unit. Motorista (R$/ton)</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Vlr Unit. Motorista (R$/ton)</label>
                     <div className="relative">
                       <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                       <input 
@@ -2520,12 +2853,12 @@ function MainApp() {
                         placeholder="0.00"
                         value={driverUnitPrice}
                         onChange={(e) => setDriverUnitPrice(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Total (R$)</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Valor Total (R$)</label>
                     <div className="relative">
                       <DollarSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                       <input 
@@ -2533,60 +2866,60 @@ function MainApp() {
                         placeholder="0.00"
                         value={driverValue}
                         onChange={(e) => setDriverValue(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Carregamento</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Data Carregamento</label>
                     <div className="relative">
                       <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                       <input 
                         type="date" 
                         value={loadingDate}
                         onChange={(e) => setLoadingDate(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Manifesto</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Data Manifesto</label>
                     <div className="relative">
                       <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                       <input 
                         type="date" 
                         value={manifestoDate}
                         onChange={(e) => setManifestoDate(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Descarregamento</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Data Descarregamento</label>
                     <div className="relative">
                       <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-zinc-600' : 'text-zinc-300'}`} />
                       <input 
                         type="date" 
                         value={unloadedDate}
                         onChange={(e) => setUnloadedDate(e.target.value)}
-                        className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all`}
+                        className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 pl-10 pr-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                       />
                     </div>
                   </div>
                   <div className="md:col-span-1 space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Observações</label>
                     <textarea 
                       placeholder="Notas sobre o motorista..."
                       value={loadingObservations}
                       onChange={(e) => setLoadingObservations(e.target.value)}
                       rows={1}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-green-500/50 outline-none transition-all resize-none`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 px-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5 resize-none`}
                     />
                   </div>
-                  <div className="flex items-end">
+                  <div className="flex items-end pt-4">
                     <button 
                       disabled={isSubmittingLoading}
-                      className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-900/20"
+                      className="w-full bg-neon hover:bg-neon/90 disabled:opacity-50 text-black font-black uppercase tracking-widest py-5 rounded-2xl transition-all shadow-xl shadow-neon/20 active:scale-95"
                     >
                       {isSubmittingLoading ? 'Salvando...' : 'Cadastrar'}
                     </button>
@@ -2596,11 +2929,13 @@ function MainApp() {
             )}
 
             {/* List Section */}
-            <section className="space-y-6">
-              <div className={`${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'} border p-5 rounded-3xl flex flex-wrap items-end gap-4 shadow-sm`}>
-                <div className="flex items-center gap-2 mr-2 mb-8">
-                  <Filter className="w-4 h-4 text-zinc-400" />
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros de Motorista</span>
+            <section className="space-y-8">
+              <div className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-zinc-50 border-zinc-200'} border p-6 rounded-[2rem] flex flex-wrap items-end gap-6 shadow-sm`}>
+                <div className="flex items-center gap-3 mr-4 mb-10">
+                  <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">
+                    <Filter className="w-4 h-4 text-neon" />
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Filtros de Motorista</span>
                 </div>
 
                 <div className="flex flex-col gap-1.5 flex-1 min-w-[160px]">
@@ -2730,12 +3065,12 @@ function MainApp() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-6">
                 {filteredLoadings.map((loading) => {
                   const freight = freights.find(f => f.id === loading.freightId);
                   return (
-                    <div key={loading.id} className={`${darkMode ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-700' : 'bg-white border-zinc-200 hover:border-zinc-300'} border rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 group transition-all shadow-sm`}>
-                      {editingId === loading.id ? (
+                    <div key={loading.id} className={`${darkMode ? 'bg-zinc-950 border-zinc-900 hover:border-neon/30' : 'bg-white border-zinc-200 hover:border-zinc-300'} border rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-8 group transition-all shadow-sm relative overflow-hidden`}>
+                      <div className="absolute top-0 left-0 w-1.5 h-full bg-neon/10 group-hover:bg-neon transition-all duration-500" />
                         <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
                           <input 
                             type="text" 
@@ -2971,36 +3306,41 @@ function MainApp() {
 
         {activeTab === 'employees' && (
           <div className="space-y-10">
+            {/* Employee Registration */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
-              <section className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
-                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                  <Users className="w-5 h-5 text-blue-500" /> Cadastrar Funcionário
+              <section className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-white border-zinc-200'} border rounded-[2.5rem] p-10 shadow-sm transition-colors relative overflow-hidden`}>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-neon/5 blur-[100px] rounded-full -mr-32 -mt-32" />
+                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-black text-xl mb-8 flex items-center gap-3 relative z-10 font-display`}>
+                  <div className="w-10 h-10 bg-neon/10 rounded-xl flex items-center justify-center">
+                    <Users className="w-5 h-5 text-neon" />
+                  </div>
+                  Cadastrar Funcionário
                 </h2>
-                <form onSubmit={handleSubmitEmployee} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <form onSubmit={handleSubmitEmployee} className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Nome</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Nome Completo</label>
                     <input 
                       type="text" 
-                      placeholder="Nome completo"
+                      placeholder="Nome do funcionário"
                       value={employeeName}
                       onChange={(e) => setEmployeeName(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 px-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Cargo/Função</label>
+                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Cargo / Função</label>
                     <input 
                       type="text" 
-                      placeholder="Ex: Expedição, Administrativo"
+                      placeholder="Ex: Auxiliar Administrativo"
                       value={employeeRole}
                       onChange={(e) => setEmployeeRole(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all`}
+                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 px-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
                     />
                   </div>
-                  <div className="flex items-end">
+                  <div className="flex items-end pt-4">
                     <button 
                       disabled={isSubmittingEmployee}
-                      className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                      className="w-full bg-neon hover:bg-neon/90 disabled:opacity-50 text-black font-black uppercase tracking-widest py-5 rounded-2xl transition-all shadow-xl shadow-neon/20 active:scale-95"
                     >
                       {isSubmittingEmployee ? 'Salvando...' : 'Cadastrar'}
                     </button>
@@ -3019,7 +3359,7 @@ function MainApp() {
                     placeholder="Buscar funcionário..."
                     value={employeeSearch}
                     onChange={(e) => setEmployeeSearch(e.target.value)}
-                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/50`}
+                    className={`w-full text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-neon/50`}
                   />
                 </div>
               </div>
@@ -3109,10 +3449,10 @@ function MainApp() {
                       const matchesEndDate = !reportFilterEndDate || f.date <= reportFilterEndDate;
                       return matchesStartDate && matchesEndDate;
                     }), 'relatorio_fretes')}
-                    className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-blue-500/50' : 'bg-white border-zinc-200 hover:border-blue-500/50'} rounded-2xl transition-all group shadow-sm`}
+                    className={`flex items-center justify-between p-6 ${darkMode ? 'bg-zinc-800 border-zinc-700 hover:border-neon/50' : 'bg-white border-zinc-200 hover:border-neon/50'} rounded-2xl transition-all group shadow-sm`}
                   >
                     <div className="flex items-center gap-4">
-                      <div className={`p-3 ${darkMode ? 'bg-blue-500/20' : 'bg-blue-500/10'} rounded-xl text-blue-500`}>
+                      <div className={`p-3 ${darkMode ? 'bg-neon/20' : 'bg-neon/10'} rounded-xl text-neon`}>
                         <ClipboardList className="w-6 h-6" />
                       </div>
                       <div className="text-left">
@@ -3120,7 +3460,7 @@ function MainApp() {
                         <div className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Lista completa em formato CSV</div>
                       </div>
                     </div>
-                    <Download className={`w-5 h-5 ${darkMode ? 'text-zinc-700' : 'text-zinc-300'} group-hover:text-blue-500 transition-colors`} />
+                    <Download className={`w-5 h-5 ${darkMode ? 'text-zinc-700' : 'text-zinc-300'} group-hover:text-neon transition-colors`} />
                   </button>
 
                   <button 
@@ -3192,8 +3532,8 @@ function MainApp() {
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
             <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-8 rounded-3xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col space-y-6 shadow-2xl transition-colors`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 text-blue-500">
-                  <div className="p-3 bg-blue-500/10 rounded-2xl">
+                <div className="flex items-center gap-4 text-neon">
+                  <div className="p-3 bg-neon/10 rounded-2xl">
                     <ClipboardList size={24} />
                   </div>
                   <div>
@@ -3236,13 +3576,13 @@ function MainApp() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
                     <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Unitário Empresa</span>
-                    <div className="text-blue-600 font-bold">
+                    <div className="text-neon font-bold">
                       R$ {freights.find(f => f.id === viewingFreightId)?.valorFrete?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} /ton
                     </div>
                   </div>
                   <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
                     <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Faturamento (Calc)</span>
-                    <div className="text-green-600 font-bold">
+                    <div className="text-neon font-bold">
                       R$ {((loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + curr.weight, 0) / 1000) * (freights.find(f => f.id === viewingFreightId)?.valorFrete || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
@@ -3254,15 +3594,15 @@ function MainApp() {
                   </div>
                   <div className={`${darkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'} p-4 rounded-2xl`}>
                     <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-1`}>Lucro Real</span>
-                    <div className={`font-bold ${((loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + curr.weight, 0) / 1000) * ((freights.find(f => f.id === viewingFreightId)?.valorFrete || 0) - (freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista || 0))) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                    <div className={`font-bold ${((loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + curr.weight, 0) / 1000) * ((freights.find(f => f.id === viewingFreightId)?.valorFrete || 0) - (freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista || 0))) >= 0 ? 'text-neon' : 'text-red-500'}`}>
                       R$ {((loadings.filter(l => l.freightId === viewingFreightId).reduce((acc, curr) => acc + curr.weight, 0) / 1000) * ((freights.find(f => f.id === viewingFreightId)?.valorFrete || 0) - (freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                 </div>
 
                 {freights.find(f => f.id === viewingFreightId)?.observations && (
-                  <div className={`${darkMode ? 'bg-blue-500/5 border-blue-500/10' : 'bg-blue-50 border-blue-100'} border p-4 rounded-2xl`}>
-                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-blue-400' : 'text-blue-600'} block mb-1`}>Observações do Frete</span>
+                  <div className={`${darkMode ? 'bg-neon/5 border-neon/10' : 'bg-neon/5 border-neon/10'} border p-4 rounded-2xl`}>
+                    <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-neon' : 'text-neon'} block mb-1`}>Observações do Frete</span>
                     <p className={`text-sm ${darkMode ? 'text-zinc-300' : 'text-zinc-700'} whitespace-pre-wrap`}>
                       {freights.find(f => f.id === viewingFreightId)?.observations}
                     </p>
@@ -3271,7 +3611,7 @@ function MainApp() {
 
                 <div className="space-y-4">
                   <h4 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
-                    <Truck className="w-4 h-4 text-green-500" /> Motoristas Vinculados
+                    <Truck className="w-4 h-4 text-neon" /> Motoristas Vinculados
                   </h4>
                   
                   <div className="space-y-3">
@@ -3279,7 +3619,7 @@ function MainApp() {
                       loadings.filter(l => l.freightId === viewingFreightId).map(loading => (
                         <div key={loading.id} className={`${darkMode ? 'bg-zinc-800/30 border-zinc-800' : 'bg-white border-zinc-100'} border rounded-2xl p-4 flex items-center justify-between`}>
                           <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 ${darkMode ? 'bg-zinc-800' : 'bg-zinc-50'} rounded-xl flex items-center justify-center text-green-500`}>
+                            <div className={`w-10 h-10 ${darkMode ? 'bg-zinc-800' : 'bg-zinc-50'} rounded-xl flex items-center justify-center text-neon`}>
                               <UserIcon className="w-5 h-5" />
                             </div>
                               <div>
@@ -3297,7 +3637,7 @@ function MainApp() {
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
                                   <div className="flex flex-col">
                                     <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Receita</span>
-                                    <span className="text-[10px] font-bold text-blue-500">
+                                    <span className="text-[10px] font-bold text-neon">
                                       R$ {((loading.weight / 1000) * (freights.find(f => f.id === viewingFreightId)?.valorFrete || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </span>
                                   </div>
@@ -3309,7 +3649,7 @@ function MainApp() {
                                   </div>
                                   <div className="flex flex-col">
                                     <span className={`text-[8px] uppercase font-bold ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Lucro</span>
-                                    <span className="text-[10px] font-black text-green-600">
+                                    <span className="text-[10px] font-black text-neon">
                                       R$ {((loading.weight / 1000) * ((freights.find(f => f.id === viewingFreightId)?.valorFrete || 0) - (freights.find(f => f.id === viewingFreightId)?.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </span>
                                   </div>
@@ -3322,7 +3662,7 @@ function MainApp() {
                               </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${loading.manifestoDone ? 'bg-green-500/10 text-green-500' : 'bg-zinc-500/10 text-zinc-500'}`}>
+                            <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${loading.manifestoDone ? 'bg-neon/10 text-neon' : 'bg-zinc-500/10 text-zinc-500'}`}>
                               Manifesto
                             </div>
                             <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${loading.unloaded ? 'bg-green-500/10 text-green-500' : 'bg-zinc-500/10 text-zinc-500'}`}>
@@ -3596,9 +3936,19 @@ function MainApp() {
 
 function SummaryCard({ label, value, color, darkMode }: { label: string, value: string, color: string, darkMode: boolean }) {
   return (
-    <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border p-6 rounded-3xl shadow-sm transition-colors`}>
-      <span className={`text-[10px] uppercase tracking-widest font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-2`}>{label}</span>
-      <div className={`text-xl font-black ${color}`}>{value}</div>
+    <div className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-white border-zinc-200'} border p-6 rounded-3xl shadow-sm transition-all hover:border-neon/50 group relative overflow-hidden hover:shadow-[0_0_20px_rgba(0,255,0,0.1)]`}>
+      <div className="absolute top-0 left-0 w-1.5 h-full bg-neon/10 group-hover:bg-neon transition-all duration-500 shadow-[0_0_10px_rgba(0,255,0,0.3)]" />
+      <div className="flex flex-col gap-1 relative z-10">
+        <span className={`text-[10px] uppercase font-black tracking-[0.2em] ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>
+          {label}
+        </span>
+        <div className={`text-2xl font-black font-display tracking-tight ${color}`}>
+          {value}
+        </div>
+      </div>
+      <div className="absolute -bottom-4 -right-4 opacity-[0.03] group-hover:opacity-[0.08] transition-all duration-700 transform group-hover:scale-110 group-hover:-rotate-12">
+        <Activity className="w-24 h-24 text-neon" />
+      </div>
     </div>
   );
 }
@@ -3641,16 +3991,21 @@ function SidebarItem({ icon: Icon, label, active, onClick, darkMode }: { icon: a
   return (
     <button 
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all ${
+      className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group relative overflow-hidden ${
         active 
-          ? 'bg-green-500 text-white font-bold shadow-lg shadow-green-500/20' 
-          : darkMode
-            ? 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
+          ? 'bg-neon text-black shadow-[0_0_20px_rgba(0,255,0,0.2)]' 
+          : `${darkMode ? 'text-zinc-500 hover:text-white hover:bg-zinc-900' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`
       }`}
     >
-      <Icon className="w-5 h-5" />
-      <span className="text-sm">{label}</span>
+      {active && (
+        <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-50" />
+      )}
+      <Icon className={`w-5 h-5 transition-transform duration-500 ${active ? 'scale-110' : 'group-hover:scale-110 group-hover:text-neon'}`} />
+      <span className={`text-xs font-black uppercase tracking-widest transition-all ${active ? 'translate-x-1' : 'group-hover:translate-x-1'}`}>{label}</span>
+      
+      {!active && (
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-neon group-hover:h-1/2 transition-all duration-300 rounded-l-full" />
+      )}
     </button>
   );
 }
