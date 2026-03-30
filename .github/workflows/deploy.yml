@@ -24,6 +24,10 @@ jobs:
       - name: Gerando versão final (Build)
         run: npm run build
 
+      - name: Verificando Segredos (Diagnóstico)
+        run: |
+          if [ -z "${{ secrets.FTP_SERVER }}" ]; then echo "ERRO: FTP_SERVER não encontrado!"; exit 1; else echo "OK: FTP_SERVER configurado."; fi
+
       - name: Enviando para Hostinger via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
