@@ -130,7 +130,9 @@ function MainApp() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authCompanyName, setAuthCompanyName] = useState('');
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [showAuthForm, setShowAuthForm] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -269,7 +271,12 @@ function MainApp() {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserProfile(session.user.id, session.user.email!, session.user.user_metadata.full_name);
+        fetchUserProfile(
+          session.user.id, 
+          session.user.email!, 
+          session.user.user_metadata.full_name || session.user.user_metadata.name,
+          session.user.user_metadata.company_name
+        );
       } else {
         setLoading(false);
       }
@@ -280,7 +287,12 @@ function MainApp() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserProfile(session.user.id, session.user.email!, session.user.user_metadata.full_name);
+        fetchUserProfile(
+          session.user.id, 
+          session.user.email!, 
+          session.user.user_metadata.full_name || session.user.user_metadata.name,
+          session.user.user_metadata.company_name
+        );
       } else {
         setUserProfile(null);
         setLoading(false);
@@ -290,7 +302,7 @@ function MainApp() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserProfile = async (uid: string, email: string, name: string) => {
+  const fetchUserProfile = async (uid: string, email: string, name: string, companyName?: string) => {
     try {
       const { data, error } = await supabase
         .from('users')
@@ -317,10 +329,23 @@ function MainApp() {
             email: email,
             role: 'master',
             name: name || 'Master Admin',
+            companyName: companyName || 'Logística Master',
             approved: true
           };
           await supabase.from('users').upsert(masterProfile);
           setUserProfile(masterProfile);
+        } else {
+          // Create a default profile for new users
+          const newProfile: UserProfile = {
+            id: uid,
+            email: email,
+            role: 'user',
+            name: name || email.split('@')[0],
+            companyName: companyName || '',
+            approved: false
+          };
+          await supabase.from('users').upsert(newProfile);
+          setUserProfile(newProfile);
         }
       }
     } catch (err) {
@@ -515,14 +540,24 @@ function MainApp() {
       });
       if (error) setLoginError(error.message);
     } else {
+      if (!authCompanyName) {
+        setLoginError("Nome da empresa é obrigatório para cadastro.");
+        return;
+      }
       const { error } = await supabase.auth.signUp({
         email: authEmail,
         password: authPassword,
+        options: {
+          data: {
+            company_name: authCompanyName,
+            name: authEmail.split('@')[0]
+          }
+        }
       });
       if (error) {
         setLoginError(error.message);
       } else {
-        alert("Cadastro realizado! Verifique seu e-mail se necessário ou tente entrar.");
+        setLoginError("Cadastro realizado! Verifique seu e-mail se necessário ou tente entrar.");
         setAuthMode('login');
       }
     }
@@ -862,36 +897,207 @@ function MainApp() {
 
   if (loading) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
 
-  if (!user) {
+  if (!user && !showAuthForm) {
     return (
-      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 space-y-8 border border-zinc-100">
+      <div className="min-h-screen bg-white selection:bg-green-100">
+        {/* Navbar */}
+        <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-md border-b border-zinc-100 z-50">
+          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg shadow-green-200">
+                <Truck className="text-white w-6 h-6" />
+              </div>
+              <span className="text-xl font-black text-zinc-900 tracking-tight">LOGI<span className="text-green-500">FLOW</span></span>
+            </div>
+            <div className="hidden md:flex items-center gap-8 text-sm font-bold text-zinc-500">
+              <a href="#features" className="hover:text-zinc-900 transition-colors">Funcionalidades</a>
+              <a href="#pricing" className="hover:text-zinc-900 transition-colors">Preços</a>
+              <a href="#about" className="hover:text-zinc-900 transition-colors">Sobre</a>
+            </div>
+            <button 
+              onClick={() => {
+                setAuthMode('login');
+                setShowAuthForm(true);
+              }}
+              className="px-6 py-3 bg-zinc-900 text-white text-sm font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200"
+            >
+              Entrar
+            </button>
+          </div>
+        </nav>
+
+        {/* Hero Section */}
+        <section className="pt-40 pb-20 px-6">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div className="space-y-8">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-full text-xs font-bold tracking-widest uppercase">
+                <Activity size={14} /> Sistema de Gestão Inteligente
+              </div>
+              <h1 className="text-6xl lg:text-7xl font-black text-zinc-900 leading-[0.9] tracking-tighter">
+                Sua logística <br />
+                <span className="text-green-500">em outro nível.</span>
+              </h1>
+              <p className="text-xl text-zinc-500 leading-relaxed max-w-lg">
+                Gerencie múltiplas filiais, fretes, carregamentos e faturamento em uma única plataforma intuitiva e poderosa.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button 
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setShowAuthForm(true);
+                  }}
+                  className="px-8 py-5 bg-green-500 text-white font-bold rounded-3xl hover:bg-green-600 transition-all shadow-2xl shadow-green-200 flex items-center justify-center gap-3 group"
+                >
+                  Começar Agora Grátis <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+                </button>
+                <button className="px-8 py-5 bg-zinc-100 text-zinc-900 font-bold rounded-3xl hover:bg-zinc-200 transition-all">
+                  Ver Demonstração
+                </button>
+              </div>
+              <div className="flex items-center gap-6 pt-4">
+                <div className="flex -space-x-3">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-zinc-200 overflow-hidden">
+                      <img src={`https://picsum.photos/seed/user${i}/100/100`} alt="User" referrerPolicy="no-referrer" />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-zinc-500 font-medium">
+                  <span className="text-zinc-900 font-bold">+500 empresas</span> já confiam no LogiFlow
+                </p>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="absolute -inset-4 bg-green-500/10 blur-3xl rounded-full"></div>
+              <div className="relative bg-zinc-900 rounded-[40px] p-4 shadow-2xl overflow-hidden border border-zinc-800">
+                <img 
+                  src="https://picsum.photos/seed/logistics/1200/800" 
+                  alt="Dashboard Preview" 
+                  className="rounded-[32px] opacity-80"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-900/80 via-transparent to-transparent"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Stats */}
+        <section className="py-20 bg-zinc-50 border-y border-zinc-100">
+          <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-12">
+            {[
+              { label: 'Cargas/Mês', value: '15k+' },
+              { label: 'Filiais Ativas', value: '800+' },
+              { label: 'Economia Média', value: '24%' },
+              { label: 'Satisfação', value: '99.9%' },
+            ].map((stat, i) => (
+              <div key={i} className="text-center space-y-2">
+                <div className="text-4xl font-black text-zinc-900">{stat.value}</div>
+                <div className="text-xs uppercase tracking-widest font-bold text-zinc-400">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Features */}
+        <section id="features" className="py-32 px-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center max-w-2xl mx-auto mb-20 space-y-4">
+              <h2 className="text-4xl font-black text-zinc-900 tracking-tight">Tudo o que você precisa para crescer.</h2>
+              <p className="text-zinc-500">Ferramentas poderosas desenhadas para simplificar sua operação diária.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[
+                { icon: LayoutDashboard, title: 'Dashboard em Tempo Real', desc: 'Visualize toda sua operação em um único lugar com métricas atualizadas.' },
+                { icon: Truck, title: 'Gestão de Carregamentos', desc: 'Controle motoristas, placas e pesos com facilidade e precisão.' },
+                { icon: DollarSign, title: 'Faturamento Automatizado', desc: 'Calcule lucros e gere relatórios de faturamento em segundos.' },
+              ].map((feature, i) => (
+                <div key={i} className="p-10 bg-white border border-zinc-100 rounded-[32px] hover:border-green-500/30 hover:shadow-2xl hover:shadow-green-500/5 transition-all group">
+                  <div className="w-14 h-14 bg-zinc-50 text-zinc-900 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-green-500 group-hover:text-white transition-colors">
+                    <feature.icon size={28} />
+                  </div>
+                  <h3 className="text-xl font-bold text-zinc-900 mb-4">{feature.title}</h3>
+                  <p className="text-zinc-500 leading-relaxed">{feature.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="py-20 border-t border-zinc-100">
+          <div className="max-w-7xl mx-auto px-6 flex flex-col md:row items-center justify-between gap-8">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">
+                <Truck className="text-white w-5 h-5" />
+              </div>
+              <span className="text-lg font-black text-zinc-900 tracking-tight">LOGI<span className="text-green-500">FLOW</span></span>
+            </div>
+            <p className="text-sm text-zinc-400">© 2026 LogiFlow. Todos os direitos reservados.</p>
+            <div className="flex gap-6 text-sm font-bold text-zinc-500">
+              <a href="#" className="hover:text-zinc-900">Privacidade</a>
+              <a href="#" className="hover:text-zinc-900">Termos</a>
+            </div>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  if (!user && showAuthForm) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6 relative overflow-hidden">
+        {/* Background Accents */}
+        <div className="absolute top-0 left-0 w-96 h-96 bg-green-500/5 blur-[100px] rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-blue-500/5 blur-[100px] rounded-full translate-x-1/2 translate-y-1/2"></div>
+
+        <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-10 space-y-8 border border-zinc-100 relative z-10">
+          <button 
+            onClick={() => setShowAuthForm(false)}
+            className="absolute top-6 right-6 p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
+          >
+            <X size={24} />
+          </button>
+
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-200">
+            <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-green-200">
               <Truck className="text-white w-8 h-8" />
             </div>
-            <h1 className="text-3xl font-bold text-zinc-900">Logística Multi-Filial</h1>
-            <p className="text-zinc-500">{authMode === 'login' ? 'Entre na sua conta' : 'Crie sua conta'}</p>
+            <h1 className="text-3xl font-black text-zinc-900 tracking-tight">LogiFlow</h1>
+            <p className="text-zinc-500 font-medium">{authMode === 'login' ? 'Bem-vindo de volta!' : 'Crie sua conta empresarial'}</p>
           </div>
 
           <form onSubmit={handleEmailAuth} className="space-y-4">
+            {authMode === 'signup' && (
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-black text-zinc-400 ml-1 tracking-widest">Nome da Empresa</label>
+                <input 
+                  type="text"
+                  required
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 transition-all"
+                  placeholder="Ex: Transportadora Silva"
+                  value={authCompanyName}
+                  onChange={(e) => setAuthCompanyName(e.target.value)}
+                />
+              </div>
+            )}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">E-mail</label>
+              <label className="text-[10px] uppercase font-black text-zinc-400 ml-1 tracking-widest">E-mail Corporativo</label>
               <input 
                 type="email"
                 required
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 transition-all"
                 placeholder="seu@email.com"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Senha</label>
+              <label className="text-[10px] uppercase font-black text-zinc-400 ml-1 tracking-widest">Senha</label>
               <input 
                 type="password"
                 required
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 transition-all"
                 placeholder="••••••••"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
@@ -899,9 +1105,9 @@ function MainApp() {
             </div>
             <button
               type="submit"
-              className="w-full py-4 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200"
+              className="w-full py-5 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200 mt-4"
             >
-              {authMode === 'login' ? 'Entrar' : 'Cadastrar'}
+              {authMode === 'login' ? 'Entrar no Sistema' : 'Criar Minha Conta'}
             </button>
           </form>
 
@@ -909,8 +1115,8 @@ function MainApp() {
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-zinc-100"></span>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-zinc-400 font-bold">Ou</span>
+            <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-black">
+              <span className="bg-white px-4 text-zinc-400">Ou continue com</span>
             </div>
           </div>
 
@@ -919,27 +1125,26 @@ function MainApp() {
             className="w-full py-4 border-2 border-zinc-100 text-zinc-900 font-bold rounded-2xl hover:bg-zinc-50 transition-all flex items-center justify-center gap-3"
           >
             <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-            Entrar com Google
+            Google Workspace
           </button>
 
-          <div className="text-center">
+          <div className="text-center pt-2">
             <button 
-              onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+              onClick={() => {
+                setAuthMode(authMode === 'login' ? 'signup' : 'login');
+                setLoginError(null);
+              }}
               className="text-sm font-bold text-zinc-500 hover:text-zinc-900 transition-colors"
             >
-              {authMode === 'login' ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Entre'}
+              {authMode === 'login' ? 'Novo por aqui? Cadastre sua empresa' : 'Já possui conta? Faça login'}
             </button>
           </div>
 
           {loginError && (
-            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium text-center">
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs font-bold text-center animate-shake">
               {loginError}
             </div>
           )}
-          
-          <div className="text-center">
-            <p className="text-xs text-zinc-400 uppercase tracking-widest font-semibold">Sistema de Gestão de Transportes</p>
-          </div>
         </div>
       </div>
     );
