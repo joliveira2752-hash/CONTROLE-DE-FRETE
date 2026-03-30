@@ -2,10 +2,14 @@
    COMO COLOCAR SEU SITE NA HOSTINGER (PASSO A PASSO)
 ======================================================
 
-O erro "Estrutura de projeto inválida" acontece porque você está usando a ferramenta 
-errada na Hostinger. Siga estes passos exatos:
+O erro de "TELA BRANCA" acontece quando o site não consegue encontrar os arquivos
+de estilo e script. Eu atualizei a configuração para usar "Caminhos Relativos",
+o que deve resolver isso.
+
+Siga estes passos exatos:
 
 1. GERAR O SITE NO SEU COMPUTADOR:
+   - Baixe o projeto (Export to ZIP) e extraia no seu PC.
    - Tenha o Node.js instalado (https://nodejs.org/).
    - Dê dois cliques no arquivo "gerar_site_pronto.bat" nesta pasta.
    - Isso vai criar uma pasta chamada "dist".
@@ -22,11 +26,5 @@ errada na Hostinger. Siga estes passos exatos:
    - index.html (arquivo)
    - index.php (arquivo que eu criei para ajudar a Hostinger)
    - .htaccess (arquivo para o login funcionar)
-
-4. BANCO DE DADOS:
-   - Não crie nada de banco na Hostinger.
-   - O site já está conectado ao seu Supabase.
-   - Se o site abrir mas não salvar nada, você precisa ir no SQL Editor do Supabase
-     e rodar o código de criação das tabelas que eu te enviei.
 
 ======================================================
