@@ -1,0 +1,180 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: branches
+    // Fields:
+    //   - name: string (required)
+    //   - active: boolean (optional)
+    //   - createdAt: timestamp (optional)
+    //
+    // Collection: users
+    // Fields:
+    //   - email: string (required, email format)
+    //   - name: string (optional)
+    //   - role: string (required, enum: ['master', 'admin', 'user'])
+    //   - branchId: string (optional)
+    //   - approved: boolean (optional)
+    //   - created_at: timestamp (optional)
+    //
+    // Collection: freights
+    // Fields:
+    //   - branchId: string (required)
+    //   - description: string (required)
+    //   - product: string (required)
+    //   - origin: string (required)
+    //   - destination: string (required)
+    //   - totalWeight: number (required)
+    //   - status: string (required, enum: ['Aberto', 'Carregando', 'Finalizado', 'Cancelado'])
+    //   - date: timestamp (optional)
+    //   - observations: string (optional)
+    //   - valorFrete: number (optional)
+    //   - valorRecebido: number (optional)
+    //   - valorPagoMotorista: number (optional)
+    //
+    // Collection: loadings
+    // Fields:
+    //   - branchId: string (required)
+    //   - freightId: string (required)
+    //   - driverName: string (required)
+    //   - plate: string (required)
+    //   - weight: number (required)
+    //   - manifestoDone: boolean (optional)
+    //   - unloaded: boolean (optional)
+    //   - date: string (optional)
+    //   - manifestoDate: string (optional)
+    //   - unloadedDate: string (optional)
+    //   - observations: string (optional)
+    //   - orderGiverId: string (optional)
+    //   - orderGiverName: string (optional)
+    //   - driverUnitPrice: number (optional)
+    //   - driverValue: number (optional)
+    //
+    // Collection: employees
+    // Fields:
+    //   - branchId: string (required)
+    //   - name: string (required)
+    //   - role: string (optional)
+    //   - active: boolean (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "joliveira2752@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isMaster() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master' ||
+         (request.auth.token.email == "joliveira2752@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidBranch(data) {
+      return hasOnlyAllowedFields(['name', 'active', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100;
+    }
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['email', 'name', 'role', 'branchId', 'approved', 'created_at']) &&
+             isValidEmail(data.email) &&
+             data.role in ['master', 'admin', 'user'];
+    }
+
+    function isValidFreight(data) {
+      return hasOnlyAllowedFields(['branchId', 'description', 'product', 'origin', 'destination', 'totalWeight', 'status', 'date', 'observations', 'valorFrete', 'valorRecebido', 'valorPagoMotorista']) &&
+             data.branchId is string &&
+             data.description is string &&
+             data.product is string &&
+             data.origin is string &&
+             data.destination is string &&
+             data.totalWeight is number &&
+             data.status in ['Aberto', 'Carregando', 'Finalizado', 'Cancelado'];
+    }
+
+    function isValidLoading(data) {
+      return hasOnlyAllowedFields(['branchId', 'freightId', 'driverName', 'plate', 'weight', 'manifestoDone', 'unloaded', 'date', 'manifestoDate', 'unloadedDate', 'observations', 'orderGiverId', 'orderGiverName', 'driverUnitPrice', 'driverValue']) &&
+             data.branchId is string &&
+             data.freightId is string &&
+             data.driverName is string &&
+             data.plate is string &&
+             data.weight is number;
+    }
+
+    function isValidEmployee(data) {
+      return hasOnlyAllowedFields(['branchId', 'name', 'role', 'active']) &&
+             data.branchId is string &&
+             data.name is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /branches/{branchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidBranch(request.resource.data);
+      allow delete: if isMaster();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow delete: if isMaster();
+    }
+
+    match /freights/{freightId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidFreight(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /loadings/{loadingId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidLoading(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /employees/{employeeId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidEmployee(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

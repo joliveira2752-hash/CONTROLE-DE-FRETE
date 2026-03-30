@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "branches": {
+      "title": "Filiais",
+      "description": "Representa uma filial da empresa de logística.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Nome da filial" },
+        "active": { "type": "boolean", "description": "Se a filial está ativa" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Data de criação" }
+      },
+      "required": ["name"]
+    },
+    "users": {
+      "title": "Usuários",
+      "description": "Perfil do usuário no sistema.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "description": "E-mail do usuário" },
+        "name": { "type": "string", "description": "Nome completo" },
+        "role": { "type": "string", "enum": ["master", "admin", "user"], "description": "Nível de acesso" },
+        "branchId": { "type": "string", "description": "ID da filial vinculada" },
+        "approved": { "type": "boolean", "description": "Se o acesso foi aprovado" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Data de cadastro" }
+      },
+      "required": ["email", "role"]
+    },
+    "freights": {
+      "title": "Fretes",
+      "description": "Registro de um frete.",
+      "type": "object",
+      "properties": {
+        "branchId": { "type": "string", "description": "ID da filial" },
+        "description": { "type": "string", "description": "Descrição do frete" },
+        "product": { "type": "string", "description": "Produto transportado" },
+        "origin": { "type": "string", "description": "Origem" },
+        "destination": { "type": "string", "description": "Destino" },
+        "totalWeight": { "type": "number", "description": "Peso total" },
+        "status": { "type": "string", "enum": ["Aberto", "Carregando", "Finalizado", "Cancelado"], "description": "Status do frete" },
+        "date": { "type": "string", "format": "date-time", "description": "Data do frete" },
+        "observations": { "type": "string", "description": "Observações" },
+        "valorFrete": { "type": "number", "description": "Valor do frete" },
+        "valorRecebido": { "type": "number", "description": "Valor recebido" },
+        "valorPagoMotorista": { "type": "number", "description": "Valor pago ao motorista" }
+      },
+      "required": ["branchId", "description", "product", "origin", "destination", "totalWeight"]
+    },
+    "loadings": {
+      "title": "Carregamentos",
+      "description": "Registro de um carregamento vinculado a um frete.",
+      "type": "object",
+      "properties": {
+        "branchId": { "type": "string", "description": "ID da filial" },
+        "freightId": { "type": "string", "description": "ID do frete" },
+        "driverName": { "type": "string", "description": "Nome do motorista" },
+        "plate": { "type": "string", "description": "Placa do veículo" },
+        "weight": { "type": "number", "description": "Peso carregado" },
+        "manifestoDone": { "type": "boolean", "description": "Se o manifesto foi feito" },
+        "unloaded": { "type": "boolean", "description": "Se foi descarregado" },
+        "date": { "type": "string", "description": "Data do carregamento" },
+        "manifestoDate": { "type": "string", "description": "Data do manifesto" },
+        "unloadedDate": { "type": "string", "description": "Data de descarga" },
+        "observations": { "type": "string", "description": "Observações" },
+        "orderGiverId": { "type": "string", "description": "ID de quem deu a ordem" },
+        "orderGiverName": { "type": "string", "description": "Nome de quem deu a ordem" },
+        "driverUnitPrice": { "type": "number", "description": "Preço unitário do motorista" },
+        "driverValue": { "type": "number", "description": "Valor total do motorista" }
+      },
+      "required": ["branchId", "freightId", "driverName", "plate", "weight"]
+    },
+    "employees": {
+      "title": "Funcionários",
+      "description": "Registro de funcionários por filial.",
+      "type": "object",
+      "properties": {
+        "branchId": { "type": "string", "description": "ID da filial" },
+        "name": { "type": "string", "description": "Nome do funcionário" },
+        "role": { "type": "string", "description": "Cargo" },
+        "active": { "type": "boolean", "description": "Se está ativo" }
+      },
+      "required": ["branchId", "name"]
+    }
+  },
+  "firestore": {
+    "/branches/{branchId}": { "schema": "branches", "description": "Coleção de filiais" },
+    "/users/{userId}": { "schema": "users", "description": "Coleção de perfis de usuários" },
+    "/freights/{freightId}": { "schema": "freights", "description": "Coleção de fretes" },
+    "/loadings/{loadingId}": { "schema": "loadings", "description": "Coleção de carregamentos" },
+    "/employees/{employeeId}": { "schema": "employees", "description": "Coleção de funcionários" }
+  }
+}
