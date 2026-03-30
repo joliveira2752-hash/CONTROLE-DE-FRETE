@@ -26,7 +26,11 @@ jobs:
 
       - name: Verificando Segredos (Diagnóstico)
         run: |
-          if [ -z "${{ secrets.FTP_SERVER }}" ]; then echo "ERRO: FTP_SERVER não encontrado!"; exit 1; else echo "OK: FTP_SERVER configurado."; fi
+          ERROR=0
+          if [ -z "${{ secrets.FTP_SERVER }}" ]; then echo "ERRO: FTP_SERVER não encontrado!"; ERROR=1; fi
+          if [ -z "${{ secrets.FTP_USERNAME }}" ]; then echo "ERRO: FTP_USERNAME não encontrado!"; ERROR=1; fi
+          if [ -z "${{ secrets.FTP_PASSWORD }}" ]; then echo "ERRO: FTP_PASSWORD não encontrado!"; ERROR=1; fi
+          if [ $ERROR -eq 1 ]; then exit 1; else echo "OK: Todos os segredos estão configurados."; fi
 
       - name: Enviando para Hostinger via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
