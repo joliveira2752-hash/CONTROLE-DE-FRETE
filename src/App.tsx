@@ -2759,7 +2759,7 @@ function MainApp() {
                 )}
               </div>
             </section>
-          </>
+          </div>
         )}
 
         {activeTab === 'loadings' && (
@@ -3071,6 +3071,7 @@ function MainApp() {
                   return (
                     <div key={loading.id} className={`${darkMode ? 'bg-zinc-950 border-zinc-900 hover:border-neon/30' : 'bg-white border-zinc-200 hover:border-zinc-300'} border rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-8 group transition-all shadow-sm relative overflow-hidden`}>
                       <div className="absolute top-0 left-0 w-1.5 h-full bg-neon/10 group-hover:bg-neon transition-all duration-500" />
+                      {editingId === loading.id ? (
                         <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
                           <input 
                             type="text" 
