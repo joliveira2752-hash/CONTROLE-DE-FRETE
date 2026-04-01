@@ -345,6 +345,7 @@ function MainApp() {
   const [reportFilterStartDate, setReportFilterStartDate] = useState('');
   const [reportFilterEndDate, setReportFilterEndDate] = useState('');
   const [freightSearch, setFreightSearch] = useState('');
+  const [globalSearch, setGlobalSearch] = useState('');
 
   useEffect(() => {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
@@ -1608,68 +1609,59 @@ function MainApp() {
   });
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-black text-zinc-400' : 'bg-zinc-100 text-zinc-600'} font-sans flex flex-col md:flex-row transition-colors duration-300 selection:bg-neon selection:text-black`}>
+    <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-300 ${darkMode ? 'dark' : ''}`}>
       {/* Sidebar */}
-      <aside className={`w-full md:w-72 ${darkMode ? 'bg-black border-zinc-900' : 'bg-white border-zinc-200'} border-r flex flex-col transition-all duration-500 relative z-20 md:sticky md:top-0 md:h-screen overflow-y-auto`}>
-        <div className="p-10 flex flex-col items-center">
-          <div className="relative group">
-            <div className="absolute -inset-4 bg-neon/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-all duration-700" />
-            <div className="w-20 h-20 bg-black border-2 border-neon rounded-[2rem] flex items-center justify-center shadow-[0_0_30px_rgba(0,255,0,0.15)] relative z-10 rotate-3 group-hover:rotate-0 transition-all duration-500">
-              <Truck className="w-10 h-10 text-neon" />
-            </div>
+      <aside className="w-full md:w-64 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-900 flex flex-col transition-all duration-500 relative z-40 md:sticky md:top-0 md:h-screen overflow-y-auto">
+        <div className="p-8 flex flex-col items-center">
+          <div className="w-12 h-12 bg-zinc-900 dark:bg-white rounded-xl flex items-center justify-center shadow-lg">
+            <Truck className="w-6 h-6 text-white dark:text-zinc-900" />
           </div>
-          <div className="mt-8 text-center relative z-10">
-            <h1 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-black text-2xl tracking-tighter font-display uppercase leading-none`}>
-              Controle <span className="text-neon">Frete</span>
+          <div className="mt-4 text-center">
+            <h1 className="text-zinc-900 dark:text-white font-bold text-lg tracking-tight">
+              Logística<span className="text-brand-500">Pro</span>
             </h1>
-            <p className={`text-[10px] uppercase font-black tracking-[0.3em] ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} mt-1`}>
-              Logistics Systems
+            <p className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 mt-1">
+              Freight Control
             </p>
           </div>
         </div>
         
-        <nav className="flex-1 px-6 space-y-2 mt-4">
+        <nav className="flex-1 px-4 space-y-1 mt-2">
           <SidebarItem 
             active={activeTab === 'dashboard'} 
             icon={LayoutDashboard} 
             label="Dashboard" 
             onClick={() => setActiveTab('dashboard')}
-            darkMode={darkMode}
           />
           <SidebarItem 
             active={activeTab === 'faturamento'} 
             icon={DollarSign} 
             label="Faturamento" 
             onClick={() => setActiveTab('faturamento')}
-            darkMode={darkMode}
           />
           <SidebarItem 
             active={activeTab === 'freights'} 
             icon={ClipboardList} 
-            label="Novo Frete" 
+            label="Fretes" 
             onClick={() => setActiveTab('freights')}
-            darkMode={darkMode}
           />
           <SidebarItem 
             active={activeTab === 'loadings'} 
             icon={Truck} 
             label="Motoristas" 
             onClick={() => setActiveTab('loadings')}
-            darkMode={darkMode}
           />
           <SidebarItem 
             active={activeTab === 'employees'} 
             icon={Users} 
             label="Funcionários" 
             onClick={() => setActiveTab('employees')}
-            darkMode={darkMode}
           />
           <SidebarItem 
             active={activeTab === 'reports'} 
             icon={FileText} 
             label="Relatórios" 
             onClick={() => setActiveTab('reports')}
-            darkMode={darkMode}
           />
           {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
             <SidebarItem 
@@ -1677,52 +1669,48 @@ function MainApp() {
               icon={Activity} 
               label="Gerenciamento" 
               onClick={() => setActiveTab('management')}
-              darkMode={darkMode}
             />
           )}
         </nav>
 
-        <div className="p-6 mt-auto">
-          <div className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-zinc-50 border-zinc-200'} border rounded-[2rem] p-5 relative overflow-hidden group`}>
-            <div className="absolute top-0 right-0 w-24 h-24 bg-neon/5 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-neon/10 transition-all duration-500" />
-            <div className="flex items-center gap-4 relative z-10">
-              <div className="w-10 h-10 bg-zinc-900 rounded-xl flex items-center justify-center border border-zinc-800 group-hover:border-neon/30 transition-all">
-                <UserIcon className="w-5 h-5 text-neon" />
+        <div className="p-4 mt-auto">
+          <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 rounded-xl p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex items-center justify-center">
+                <UserIcon className="w-4 h-4 text-zinc-500" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className={`text-xs font-black truncate ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{userProfile?.name || 'Usuário'}</p>
-                <p className={`text-[9px] uppercase font-bold tracking-wider ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>{userProfile?.role || 'Acesso'}</p>
+                <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{userProfile?.name}</p>
+                <p className="text-[10px] text-zinc-400 uppercase font-bold">{userProfile?.role}</p>
               </div>
-              <button 
-                onClick={handleLogout}
-                className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors p-1`}
-                title="Sair"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
             </div>
-          </div>
-          <div className="mt-4 flex justify-center">
-            <button 
-              onClick={() => setDarkMode(!darkMode)}
-              className={`p-3 rounded-xl transition-all ${darkMode ? 'bg-zinc-900 text-yellow-500 hover:bg-zinc-800' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
-            >
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 p-6 md:p-10 space-y-10 overflow-y-auto">
-        {userProfile?.role === 'master' && (
-          <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} border p-4 rounded-2xl flex items-center justify-between shadow-sm mb-6 shadow-neon/5`}>
-            <div className="flex items-center gap-3">
-              <Filter className="w-5 h-5 text-neon" />
-              <span className={`text-sm font-bold ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>Visualizando Filial:</span>
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 bg-zinc-50 dark:bg-zinc-950">
+        <TopBar 
+          userProfile={userProfile}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          globalSearch={globalSearch}
+          setGlobalSearch={setGlobalSearch}
+          handleLogout={handleLogout}
+        />
+        
+        <div className="flex-1 p-8 overflow-y-auto">
+          {/* Branch Selector for Master */}
+          {userProfile?.role === 'master' && (
+            <div className="mb-8 flex flex-wrap items-center gap-4 bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+              <div className="flex items-center gap-2 text-zinc-500">
+                <Filter className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">Filial Ativa:</span>
+              </div>
               <select 
                 value={selectedBranchId}
                 onChange={(e) => setSelectedBranchId(e.target.value)}
-                className={`text-sm font-bold outline-none bg-transparent ${darkMode ? 'text-white' : 'text-zinc-900'}`}
+                className="bg-zinc-100 dark:bg-zinc-800 border-none rounded-lg px-3 py-1.5 text-sm font-medium focus:ring-2 focus:ring-zinc-900/5 outline-none transition-all"
               >
                 <option value="">Todas as Filiais</option>
                 {branches.map(b => (
@@ -1730,11 +1718,7 @@ function MainApp() {
                 ))}
               </select>
             </div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-              Modo Master Admin
-            </div>
-          </div>
-        )}
+          )}
 
         {activeTab === 'management' && userProfile?.role === 'master' && (
           <div className="space-y-10">
@@ -1949,15 +1933,35 @@ function MainApp() {
             </div>
 
             <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <SummaryCard label="Total Recebido" value={`R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-neon" darkMode={darkMode} />
-              <SummaryCard label="Total Pago" value={`R$ ${totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-red-500" darkMode={darkMode} />
-              <SummaryCard label="Lucro Líquido" value={`R$ ${netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-neon" darkMode={darkMode} />
-              <SummaryCard label="Margem" value={`${profitMargin.toFixed(1)}%`} color={profitMargin > 0 ? "text-neon" : "text-red-500"} darkMode={darkMode} />
+              <SummaryCard 
+                label="Total Recebido" 
+                value={`R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                color="green" 
+                icon={DollarSign}
+              />
+              <SummaryCard 
+                label="Total Pago" 
+                value={`R$ ${totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                color="red" 
+                icon={DollarSign}
+              />
+              <SummaryCard 
+                label="Lucro Líquido" 
+                value={`R$ ${netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                color="blue" 
+                icon={TrendingUp}
+              />
+              <SummaryCard 
+                label="Margem" 
+                value={`${profitMargin.toFixed(1)}%`} 
+                color={profitMargin > 0 ? "green" : "red"} 
+                icon={Activity}
+              />
             </section>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
-                <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6`}>Distribuição Financeira</h3>
+              <div className="glass-card p-8 rounded-3xl">
+                <h3 className="text-sm font-bold mb-8 uppercase tracking-widest text-zinc-400">Distribuição Financeira</h3>
                 <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -1968,17 +1972,23 @@ function MainApp() {
                         ]}
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={5}
+                        innerRadius={80}
+                        outerRadius={110}
+                        paddingAngle={8}
                         dataKey="value"
+                        stroke="none"
                       >
-                        <Cell fill="#00FF00" />
-                        <Cell fill="#ef4444" />
+                        <Cell fill="#22c55e" className="glow-green" />
+                        <Cell fill="#ef4444" className="glow-red" />
                       </Pie>
                       <Tooltip 
-                        contentStyle={{ backgroundColor: darkMode ? '#000000' : '#ffffff', border: `1px solid ${darkMode ? '#00FF00' : '#e5e7eb'}`, borderRadius: '12px' }}
-                        itemStyle={{ color: darkMode ? '#ffffff' : '#111827' }}
+                        contentStyle={{ 
+                          backgroundColor: darkMode ? '#09090b' : '#fff', 
+                          borderColor: darkMode ? '#27272a' : '#e4e4e7',
+                          borderRadius: '16px',
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                        }}
+                        itemStyle={{ color: darkMode ? '#fff' : '#000' }}
                         formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                       />
                       <Legend verticalAlign="bottom" height={36}/>
@@ -1987,40 +1997,51 @@ function MainApp() {
                 </div>
               </div>
 
-              <div className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} p-8 rounded-3xl border shadow-sm`}>
-                <h3 className={`${darkMode ? 'text-white' : 'text-black'} font-black mb-6`}>Top 5 Fretes por Receita</h3>
-                <div className="space-y-4">
-                  {freights
-                    .filter(f => !billingFilterFreightId || f.id === billingFilterFreightId)
-                    .map(f => {
-                      const fLoadings = billingLoadings.filter(l => l.freightId === f.id);
-                      const rev = fLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (f.valorFrete || 0)), 0);
-                      return { ...f, rev };
-                    })
-                    .filter(f => f.rev > 0)
-                    .sort((a, b) => b.rev - a.rev)
-                    .slice(0, 5)
-                    .map((f, idx) => (
-                      <div key={f.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-black border dark:border-zinc-800">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-neon/10 flex items-center justify-center text-neon font-bold text-xs">
-                            #{idx + 1}
-                          </div>
-                          <div>
-                            <div className={`text-sm font-black ${darkMode ? 'text-white' : 'text-black'}`}>{f.description}</div>
-                            <div className={`text-[10px] font-bold ${darkMode ? 'text-zinc-400' : 'text-black'}`}>{f.product}</div>
-                          </div>
-                        </div>
-                        <div className={`text-sm font-black ${darkMode ? 'text-neon' : 'text-black'}`}>
-                          R$ {f.rev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </div>
-                      </div>
-                    ))}
-                  {freights.filter(f => !billingFilterFreightId || f.id === billingFilterFreightId).length === 0 && (
-                    <div className="text-center py-10">
-                      <p className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Nenhum dado para exibir.</p>
-                    </div>
-                  )}
+              <div className="glass-card p-8 rounded-3xl">
+                <h3 className="text-sm font-bold mb-8 uppercase tracking-widest text-zinc-400">Top 5 Fretes por Receita</h3>
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={freights
+                        .filter(f => !billingFilterFreightId || f.id === billingFilterFreightId)
+                        .map(f => {
+                          const fLoadings = billingLoadings.filter(l => l.freightId === f.id);
+                          const rev = fLoadings.reduce((acc, curr) => acc + ((curr.weight / 1000) * (f.valorFrete || 0)), 0);
+                          return { name: f.description, value: rev };
+                        })
+                        .filter(f => f.value > 0)
+                        .sort((a, b) => b.value - a.value)
+                        .slice(0, 5)}
+                      layout="vertical"
+                      margin={{ left: 40, right: 40, top: 0, bottom: 0 }}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis 
+                        dataKey="name" 
+                        type="category" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        width={120}
+                        tick={{ fill: darkMode ? '#a1a1aa' : '#71717a', fontSize: 10, fontWeight: 700 }}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'transparent' }}
+                        contentStyle={{ 
+                          backgroundColor: darkMode ? '#09090b' : '#fff', 
+                          borderColor: darkMode ? '#27272a' : '#e4e4e7',
+                          borderRadius: '16px',
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                        }}
+                        itemStyle={{ color: darkMode ? '#fff' : '#000' }}
+                        formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      />
+                      <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={24}>
+                        {freights.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={index === 0 ? '#3b82f6' : '#27272a'} className={index === 0 ? 'glow-blue' : ''} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             </div>
@@ -2124,312 +2145,282 @@ function MainApp() {
           </div>
         )}
 
-        {activeTab === 'dashboard' && (
-          <div className="space-y-10">
-            {/* Dashboard Filters */}
-            <div className={`flex flex-wrap items-end gap-4 p-6 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl shadow-sm transition-colors`}>
-              <div className="flex items-center gap-2 mb-1">
-                <Filter className="w-4 h-4 text-zinc-400" />
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros Gerais</span>
-              </div>
-              
-              <div className="flex flex-col gap-1.5">
-                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Início</label>
-                <input 
-                  type="date"
-                  value={dashboardFilterStartDate}
-                  onChange={(e) => setDashboardFilterStartDate(e.target.value)}
-                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Fim</label>
-                <input 
-                  type="date"
-                  value={dashboardFilterEndDate}
-                  onChange={(e) => setDashboardFilterEndDate(e.target.value)}
-                  className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
-                />
-              </div>
-
-              {(dashboardFilterStartDate || dashboardFilterEndDate) && (
+          {activeTab === 'dashboard' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              {/* Quick Actions */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <button 
-                  onClick={() => {
-                    setDashboardFilterStartDate('');
-                    setDashboardFilterEndDate('');
-                  }}
-                  className={`mb-1 p-2.5 rounded-xl ${darkMode ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-zinc-400 hover:text-zinc-900'} border ${darkMode ? 'border-zinc-700' : 'border-zinc-200'} transition-colors`}
-                  title="Limpar Filtros"
+                  onClick={() => setActiveTab('freights')}
+                  className="flex items-center gap-3 p-4 glass-card rounded-2xl hover:border-brand-500/50 transition-all group"
                 >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Summary */}
-            <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <SummaryCard label="Peso Total" value={`${totalWeight.toLocaleString()} kg`} color="text-neon" darkMode={darkMode} />
-              <SummaryCard label="Fretes Abertos" value={openFreights.toString()} color="text-neon" darkMode={darkMode} />
-              <SummaryCard label="Manifesto Pendente" value={pendingManifesto.toString()} color="text-neon" darkMode={darkMode} />
-              <SummaryCard label="Finalizados" value={totalCompleted.toString()} color="text-neon" darkMode={darkMode} />
-            </section>
-
-            {userProfile?.role === 'master' && !selectedBranchId && (
-              <section className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
-                <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                  <Package className="w-5 h-5 text-neon" /> Resumo por Filial
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {branches.map(branch => {
-                    const branchLoadings = dashboardLoadings.filter(l => l.branchId === branch.id);
-                    const branchWeight = branchLoadings.reduce((acc, curr) => acc + curr.weight, 0);
-                    const branchRevenue = branchLoadings.reduce((acc, curr) => {
-                      const freight = freights.find(f => f.id === curr.freightId);
-                      return acc + ((curr.weight / 1000) * (freight?.valorFrete || 0));
-                    }, 0);
-                    
-                    return (
-                      <div key={branch.id} className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-zinc-50 border-zinc-100'} border p-5 rounded-2xl transition-colors`}>
-                        <div className="flex justify-between items-start mb-4">
-                          <h4 className={`font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{branch.name}</h4>
-                          <span className="text-[10px] font-bold text-neon uppercase tracking-widest">Ativa</span>
-                        </div>
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Peso Total</span>
-                            <span className={`text-xs font-bold ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>{branchWeight.toLocaleString()} kg</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Receita</span>
-                            <span className="text-xs font-bold text-neon">R$ {branchRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Viagens</span>
-                            <span className={`text-xs font-bold ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>{branchLoadings.length}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {/* Faturamento */}
-            <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <SummaryCard label="Total Recebido (Empresa)" value={`R$ ${dashboardTotalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-neon" darkMode={darkMode} />
-              <SummaryCard label="Total Pago (Motoristas)" value={`R$ ${dashboardTotalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-red-500" darkMode={darkMode} />
-              <SummaryCard label="Lucro Líquido" value={`R$ ${dashboardNetProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} color="text-neon" darkMode={darkMode} />
-              <SummaryCard label="Margem de Lucro" value={`${dashboardProfitMargin.toFixed(1)}%`} color={dashboardProfitMargin > 0 ? "text-neon" : "text-red-500"} darkMode={darkMode} />
-            </section>
-
-            {/* Performance Dashboard */}
-            {(freightPerformance.length > 0 || loadings.length > 0) && (
-              <section className={`${darkMode ? 'bg-[#0a0a0a] border-zinc-900' : 'bg-white border-zinc-200'} border rounded-3xl p-8 shadow-sm transition-colors`}>
-                <div className="flex flex-col lg:flex-row gap-12">
-                  {/* Funnel Section */}
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-8">
-                      <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
-                        <Activity className="w-5 h-5 text-neon" /> Fluxo de Operação (Funil)
-                      </h2>
-                      <div className="flex gap-4">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${darkMode ? 'bg-zinc-700' : 'bg-zinc-200'}`} />
-                          <span className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase font-bold`}>Planejado</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-neon" />
-                          <span className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase font-bold`}>Carregado</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-neon/60" />
-                          <span className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase font-bold`}>Descarregado</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="h-[400px] w-full relative">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <FunnelChart>
-                          <Tooltip 
-                            contentStyle={{ backgroundColor: darkMode ? '#18181b' : '#ffffff', border: `1px solid ${darkMode ? '#27272a' : '#e5e7eb'}`, borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            itemStyle={{ color: darkMode ? '#ffffff' : '#111827', fontWeight: 'bold' }}
-                            formatter={(value: number, name: string, props: any) => [
-                              `${value.toLocaleString()} kg`, 
-                              `${props.payload.name} (${props.payload.sub})`
-                            ]}
-                          />
-                          <Funnel
-                            data={funnelData.map(d => ({ ...d, fill: d.name === 'Planejado' && darkMode ? '#27272a' : d.fill }))}
-                            dataKey="value"
-                            isAnimationActive
-                          >
-                            {funnelData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.name === 'Planejado' && darkMode ? '#27272a' : entry.fill} />
-                            ))}
-                            <LabelList 
-                              position="center" 
-                              fill="#ffffff" 
-                              stroke="none" 
-                              dataKey="name" 
-                              style={{ fontWeight: 'bold', fontSize: '14px' }}
-                            />
-                            <LabelList 
-                              position="right" 
-                              fill={darkMode ? '#52525b' : '#94a3b8'} 
-                              stroke="none" 
-                              dataKey="sub" 
-                              style={{ fontSize: '10px', fontWeight: 'bold' }}
-                            />
-                          </Funnel>
-                        </FunnelChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    {/* Driver Funnel */}
-                    <div className="mt-12">
-                      <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-8 flex items-center gap-2`}>
-                        <Users className="w-5 h-5 text-neon" /> Top 5 Motoristas (Funil de Volume)
-                      </h2>
-                      <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <FunnelChart>
-                            <Tooltip 
-                              contentStyle={{ backgroundColor: darkMode ? '#000000' : '#ffffff', border: `1px solid ${darkMode ? '#00FF00' : '#e5e7eb'}`, borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                              itemStyle={{ color: darkMode ? '#ffffff' : '#111827', fontWeight: 'bold' }}
-                              formatter={(value: number, name: string, props: any) => [
-                                `${value.toLocaleString()} kg`, 
-                                `${props.payload.name} (${props.payload.sub})`
-                              ]}
-                            />
-                            <Funnel
-                              data={driverFunnelData}
-                              dataKey="value"
-                            >
-                              {driverFunnelData.map((entry, index) => (
-                                <Cell key={`cell-driver-${index}`} fill={entry.fill} />
-                              ))}
-                              <LabelList 
-                                position="center" 
-                                fill="#ffffff" 
-                                stroke="none" 
-                                dataKey="name" 
-                                style={{ fontSize: '11px', fontWeight: 'bold' }}
-                              />
-                            </Funnel>
-                          </FunnelChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    {/* Freight Funnel */}
-                    <div className="mt-12">
-                      <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-8 flex items-center gap-2`}>
-                        <Package className="w-5 h-5 text-neon" /> Top 5 Fretes (Funil de Volume)
-                      </h2>
-                      <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <FunnelChart>
-                            <Tooltip 
-                              contentStyle={{ backgroundColor: darkMode ? '#000000' : '#ffffff', border: `1px solid ${darkMode ? '#00FF00' : '#e5e7eb'}`, borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                              itemStyle={{ color: darkMode ? '#ffffff' : '#111827', fontWeight: 'bold' }}
-                              formatter={(value: number, name: string, props: any) => [
-                                `${value.toLocaleString()} kg`, 
-                                `${props.payload.name} (${props.payload.sub})`
-                              ]}
-                            />
-                            <Funnel
-                              data={freightFunnelData}
-                              dataKey="value"
-                            >
-                              {freightFunnelData.map((entry, index) => (
-                                <Cell key={`cell-freight-${index}`} fill={entry.fill} />
-                              ))}
-                              <LabelList 
-                                position="center" 
-                                fill="#ffffff" 
-                                stroke="none" 
-                                dataKey="name" 
-                                style={{ fontSize: '11px', fontWeight: 'bold' }}
-                              />
-                            </Funnel>
-                          </FunnelChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
+                  <div className="w-10 h-10 bg-brand-50 dark:bg-brand-500/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Plus className="w-5 h-5 text-brand-600 dark:text-brand-400" />
                   </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold text-zinc-900 dark:text-white">Novo Frete</p>
+                    <p className="text-[10px] text-zinc-400 font-medium">Cadastrar carga</p>
+                  </div>
+                </button>
+                <button 
+                  onClick={() => setActiveTab('loadings')}
+                  className="flex items-center gap-3 p-4 glass-card rounded-2xl hover:border-brand-500/50 transition-all group"
+                >
+                  <div className="w-10 h-10 bg-brand-50 dark:bg-brand-500/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Truck className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold text-zinc-900 dark:text-white">Carregamento</p>
+                    <p className="text-[10px] text-zinc-400 font-medium">Vincular motorista</p>
+                  </div>
+                </button>
+                <button 
+                  onClick={() => setActiveTab('reports')}
+                  className="flex items-center gap-3 p-4 glass-card rounded-2xl hover:border-brand-500/50 transition-all group"
+                >
+                  <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-900 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <FileText className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold text-zinc-900 dark:text-white">Relatórios</p>
+                    <p className="text-[10px] text-zinc-400 font-medium">Exportar dados</p>
+                  </div>
+                </button>
+                <button 
+                  onClick={() => setActiveTab('faturamento')}
+                  className="flex items-center gap-3 p-4 glass-card rounded-2xl hover:border-brand-500/50 transition-all group"
+                >
+                  <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-900 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <DollarSign className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold text-zinc-900 dark:text-white">Faturamento</p>
+                    <p className="text-[10px] text-zinc-400 font-medium">Financeiro</p>
+                  </div>
+                </button>
+              </div>
 
-                  {/* Metrics Sidebar */}
+              {/* Dashboard Filters */}
+              <div className={`flex flex-wrap items-end gap-4 p-6 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} border rounded-3xl shadow-sm transition-colors`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Filter className="w-4 h-4 text-zinc-400" />
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Filtros Gerais</span>
+                </div>
+                
+                <div className="flex flex-col gap-1.5">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Início</label>
+                  <input 
+                    type="date"
+                    value={dashboardFilterStartDate}
+                    onChange={(e) => setDashboardFilterStartDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data Fim</label>
+                  <input 
+                    type="date"
+                    value={dashboardFilterEndDate}
+                    onChange={(e) => setDashboardFilterEndDate(e.target.value)}
+                    className={`text-xs ${darkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
+                  />
+                </div>
+
+                {(dashboardFilterStartDate || dashboardFilterEndDate) && (
+                  <button 
+                    onClick={() => {
+                      setDashboardFilterStartDate('');
+                      setDashboardFilterEndDate('');
+                    }}
+                    className={`mb-1 p-2.5 rounded-xl ${darkMode ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-zinc-400 hover:text-zinc-900'} border ${darkMode ? 'border-zinc-700' : 'border-zinc-200'} transition-colors`}
+                    title="Limpar Filtros"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <SummaryCard 
+                  label="Peso Total" 
+                  value={`${totalWeight.toLocaleString()} kg`} 
+                  icon={Weight}
+                  trend="+12%"
+                  color="zinc"
+                />
+                <SummaryCard 
+                  label="Fretes Abertos" 
+                  value={openFreights.toString()} 
+                  icon={ClipboardList}
+                  color="brand"
+                />
+                <SummaryCard 
+                  label="Manifestos Pendentes" 
+                  value={pendingManifesto.toString()} 
+                  icon={FileText}
+                  color="red"
+                />
+                <SummaryCard 
+                  label="Viagens Finalizadas" 
+                  value={totalCompleted.toString()} 
+                  icon={CheckCircle2}
+                  color="green"
+                />
+              </div>
+
+              {/* Financial Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <SummaryCard 
+                  label="Receita Bruta" 
+                  value={`R$ ${dashboardTotalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                  icon={TrendingUp}
+                  color="green"
+                  className="!p-8"
+                />
+                <SummaryCard 
+                  label="Pago Motoristas" 
+                  value={`R$ ${dashboardTotalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                  icon={TrendingUp}
+                  color="red"
+                  className="!p-8"
+                />
+                <SummaryCard 
+                  label="Lucro Líquido" 
+                  value={`R$ ${dashboardNetProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                  icon={DollarSign}
+                  color="brand"
+                  trend={`${dashboardProfitMargin.toFixed(1)}%`}
+                  className="!p-8"
+                />
+              </div>
+
+              {/* Charts Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="glass-card p-8 rounded-3xl">
+                  <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-brand-500" /> Fluxo de Operação
+                    </h3>
+                  </div>
+                  <div className="h-[400px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <FunnelChart>
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.8)', backdropFilter: 'blur(8px)', border: 'none', borderRadius: '12px', color: '#fff' }}
+                        />
+                        <Funnel
+                          data={funnelData}
+                          dataKey="value"
+                        >
+                          {funnelData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                          <LabelList position="center" fill="#fff" dataKey="name" style={{ fontSize: '12px', fontWeight: 'bold' }} />
+                        </Funnel>
+                      </FunnelChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="glass-card p-8 rounded-3xl">
+                  <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                      <BarChart2 className="w-5 h-5 text-brand-500" /> Volume por Motorista
+                    </h3>
+                  </div>
+                  <div className="h-[400px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={driverFunnelData} layout="vertical">
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 10, fill: '#888' }} />
+                        <Tooltip 
+                          cursor={{ fill: 'transparent' }}
+                          contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.8)', backdropFilter: 'blur(8px)', border: 'none', borderRadius: '12px', color: '#fff' }}
+                        />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                          {driverFunnelData.map((entry, index) => (
+                            <Cell key={`cell-driver-${index}`} fill={entry.fill} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+            {/* Metrics Sidebar */}
                   <div className="lg:w-96 space-y-6">
-                    <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold mb-6 flex items-center gap-2`}>
-                      <TrendingUp className="w-5 h-5 text-neon" /> Inteligência de Dados
+                    <h2 className="text-sm font-bold mb-8 uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-brand-500" /> Inteligência de Dados
                     </h2>
                     
                     <div className="grid grid-cols-2 gap-4">
-                      <div className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Users className={`w-3 h-3 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
-                          <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Motoristas</span>
+                      <div className="glass-card p-5 rounded-3xl transition-all hover:translate-y-[-2px]">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Motoristas</p>
+                        <p className="text-2xl font-black">{uniqueDrivers}</p>
+                        <div className="mt-2 h-1 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 w-[65%]" />
                         </div>
-                        <div className={`text-xl font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{uniqueDrivers}</div>
                       </div>
-                      <div className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Truck className={`w-3 h-3 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
-                          <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Viagens</span>
+                      <div className="glass-card p-5 rounded-3xl transition-all hover:translate-y-[-2px]">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Total Viagens</p>
+                        <p className="text-2xl font-black">{dashboardLoadings.length}</p>
+                        <div className="mt-2 h-1 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                          <div className="h-full bg-green-500 w-[80%]" />
                         </div>
-                        <div className={`text-xl font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{dashboardLoadings.length}</div>
                       </div>
                     </div>
 
                     <div className="space-y-4">
-                      <div className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
+                      <div className="glass-card p-6 rounded-3xl transition-all hover:translate-y-[-2px]">
                         <div className="flex items-center gap-3 mb-2">
-                          <Weight className={`w-4 h-4 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
-                          <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Média por Caminhão</span>
+                          <Weight className="w-4 h-4 text-zinc-400" />
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest">Média por Caminhão</span>
                         </div>
-                        <div className={`text-2xl font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{avgWeightPerDriver.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg</div>
-                        <div className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mt-1`}>Eficiência média de carregamento</div>
+                        <div className="text-2xl font-black">{avgWeightPerDriver.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg</div>
+                        <div className="mt-3 h-1.5 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-500 w-[55%]" />
+                        </div>
                       </div>
 
                       {topDriver && (
-                        <div className={`${darkMode ? 'bg-neon/10 border-neon/20' : 'bg-neon/5 border-neon/10'} p-4 rounded-2xl border transition-colors`}>
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="p-1.5 bg-neon/20 rounded-lg">
-                              <UserIcon className="w-4 h-4 text-neon" />
+                        <div className="glass-card p-6 rounded-3xl relative overflow-hidden group transition-all hover:translate-y-[-2px]">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-brand-500/20" />
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-2xl bg-brand-500/10 flex items-center justify-center">
+                              <UserIcon className="w-5 h-5 text-brand-500" />
                             </div>
-                            <span className="text-[10px] uppercase font-bold text-neon">Melhor Desempenho</span>
+                            <span className="text-[10px] uppercase font-bold text-brand-500 tracking-widest">Melhor Desempenho</span>
                           </div>
-                          <div className={`text-lg font-black ${darkMode ? 'text-white' : 'text-zinc-900'} truncate`}>{topDriver.name}</div>
-                          <div className={`flex justify-between items-center mt-2 pt-2 border-t ${darkMode ? 'border-neon/20' : 'border-neon/10'}`}>
-                            <div className="text-center">
-                              <div className={`text-[9px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase`}>Viagens</div>
-                              <div className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-zinc-900'}`}>{topDriver.count}</div>
+                          <div className="text-xl font-black truncate mb-4">{topDriver.name}</div>
+                          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                            <div>
+                              <div className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest">Viagens</div>
+                              <div className="text-lg font-black">{topDriver.count}</div>
                             </div>
-                            <div className="text-center">
-                              <div className={`text-[9px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase`}>Total</div>
-                              <div className="text-sm font-bold text-neon">{topDriver.weight.toLocaleString()} kg</div>
+                            <div>
+                              <div className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest">Total</div>
+                              <div className="text-lg font-black text-brand-500">{topDriver.weight.toLocaleString()} kg</div>
                             </div>
                           </div>
                         </div>
                       )}
 
-                      <div className={`${darkMode ? 'bg-black border-zinc-800' : 'bg-white border-zinc-200'} p-4 rounded-2xl border shadow-sm transition-colors`}>
+                      <div className="glass-card p-6 rounded-3xl transition-all hover:translate-y-[-2px]">
                         <div className="flex items-center gap-3 mb-2">
-                          <BarChart2 className={`w-4 h-4 ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
-                          <span className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Taxa de Conclusão</span>
+                          <BarChart2 className="w-4 h-4 text-zinc-400" />
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest">Taxa de Conclusão</span>
                         </div>
                         <div className="flex items-end gap-2">
-                          <div className={`text-2xl font-black ${darkMode ? 'text-white' : 'text-zinc-900'}`}>
+                          <div className="text-2xl font-black">
                             {totalPlannedWeight > 0 ? ((totalWeight / totalPlannedWeight) * 100).toFixed(1) : 0}%
                           </div>
-                          <div className={`text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} mb-1.5`}>do planejado</div>
+                          <div className="text-[10px] text-zinc-400 mb-1.5 tracking-widest uppercase font-bold">do planejado</div>
                         </div>
-                        <div className={`w-full h-1.5 ${darkMode ? 'bg-zinc-900' : 'bg-zinc-100'} rounded-full mt-3 overflow-hidden`}>
+                        <div className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-900 rounded-full mt-4 overflow-hidden">
                           <div 
-                            className="h-full bg-neon shadow-[0_0_10px_rgba(0,255,0,0.3)]" 
+                            className="h-full bg-brand-500 glow-green" 
                             style={{ width: `${totalPlannedWeight > 0 ? (totalWeight / totalPlannedWeight) * 100 : 0}%` }}
                           />
                         </div>
@@ -2465,116 +2456,113 @@ function MainApp() {
                     </div>
                   </div>
                 </div>
-              </section>
-            )}
-          </div>
-        )}
+              )}
 
         {activeTab === 'freights' && (
-          <div className="space-y-10">
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Freight Registration */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
-              <section className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-white border-zinc-200'} border rounded-[2.5rem] p-10 shadow-sm transition-colors relative overflow-hidden`}>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-neon/5 blur-[100px] rounded-full -mr-32 -mt-32" />
-                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-black text-xl mb-8 flex items-center gap-3 relative z-10 font-display`}>
-                  <div className="w-10 h-10 bg-neon/10 rounded-xl flex items-center justify-center">
-                    <ClipboardList className="w-5 h-5 text-neon" />
+              <section className="glass-card p-8 rounded-3xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/5 blur-[100px] rounded-full -mr-32 -mt-32" />
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-8 flex items-center gap-3 relative z-10">
+                  <div className="w-10 h-10 bg-brand-50 dark:bg-brand-500/10 rounded-xl flex items-center justify-center">
+                    <ClipboardList className="w-5 h-5 text-brand-600 dark:text-brand-400" />
                   </div>
                   Novo Frete
                 </h2>
                 <form onSubmit={handleSubmitFreight} className="grid grid-cols-1 md:grid-cols-6 gap-6 relative z-10">
                   <div className="md:col-span-2 space-y-2">
-                    <label className={`text-[10px] uppercase font-black tracking-widest ${darkMode ? 'text-zinc-600' : 'text-zinc-400'} ml-1`}>Descrição</label>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Descrição</label>
                     <input 
                       type="text" 
                       placeholder="Ex: Soja - Fazenda Sol"
                       value={freightDesc}
                       onChange={(e) => setFreightDesc(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white focus:border-neon' : 'bg-white border-zinc-200 text-zinc-900 focus:border-zinc-400'} border rounded-2xl py-4 px-5 text-sm outline-none transition-all focus:ring-4 focus:ring-neon/5`}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Produto</label>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Produto</label>
                     <input 
                       type="text" 
                       placeholder="Ex: Soja"
                       value={freightProduct}
                       onChange={(e) => setFreightProduct(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Origem</label>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Origem</label>
                     <input 
                       type="text" 
                       placeholder="Ex: Sorriso-MT"
                       value={freightOrigin}
                       onChange={(e) => setFreightOrigin(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Destino</label>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Destino</label>
                     <input 
                       type="text" 
                       placeholder="Ex: Santos-SP"
                       value={freightDestination}
                       onChange={(e) => setFreightDestination(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Peso Total (kg)</label>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Peso Total (kg)</label>
                     <input 
                       type="number" 
                       placeholder="0"
                       value={freightTotalWeight}
                       onChange={(e) => setFreightTotalWeight(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Empresa (R$/ton)</label>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Valor Empresa (ton)</label>
                     <input 
                       type="number" 
                       step="0.01"
                       placeholder="0.00"
                       value={freightValorFrete}
                       onChange={(e) => setFreightValorFrete(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Valor Unitário Motorista (R$/ton)</label>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Valor Motorista (ton)</label>
                     <input 
                       type="number" 
                       step="0.01"
                       placeholder="0.00"
                       value={freightValorPagoMotorista}
                       onChange={(e) => setFreightValorPagoMotorista(e.target.value)}
-                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all`}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Total Estimado (R$)</label>
-                    <div className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-400'} border rounded-xl py-3 px-4 text-sm`}>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Total Estimado</label>
+                    <div className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl py-3 px-4 text-sm font-bold text-zinc-600 dark:text-zinc-400">
                       R$ {((Number(freightTotalWeight) / 1000) * Number(freightValorFrete) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                   <div className="md:col-span-6 space-y-2">
-                    <label className={`text-[10px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Observações</label>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Observações</label>
                     <textarea 
                       placeholder="Notas adicionais sobre o frete..."
                       value={freightObservations}
                       onChange={(e) => setFreightObservations(e.target.value)}
                       rows={2}
-                      className={`w-full ${darkMode ? 'bg-black border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'} border rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-neon/50 outline-none transition-all resize-none`}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 transition-all resize-none"
                     />
                   </div>
                   <div className="md:col-span-6 flex justify-end pt-4">
                     <button 
                       disabled={isSubmittingFreight}
-                      className="w-full md:w-auto px-12 bg-neon hover:bg-neon/90 disabled:opacity-50 text-black font-black uppercase tracking-widest py-5 rounded-2xl transition-all shadow-xl shadow-neon/20 active:scale-95"
+                      className="w-full md:w-auto px-12 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold uppercase tracking-widest py-4 rounded-xl transition-all shadow-lg shadow-brand-500/20 active:scale-95"
                     >
                       {isSubmittingFreight ? 'Salvando...' : 'Criar Frete'}
                     </button>
@@ -2584,179 +2572,117 @@ function MainApp() {
             )}
 
             {/* Freights List */}
-            <section className="space-y-8">
-              <div className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-zinc-50 border-zinc-200'} border p-6 rounded-[2rem] flex flex-wrap items-end gap-6 shadow-sm`}>
-                <div className="flex items-center gap-3 mr-4 mb-10">
-                  <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">
-                    <Filter className="w-4 h-4 text-neon" />
-                  </div>
-                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Filtros de Frete</span>
-                </div>
-
-                <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
-                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Buscar</label>
+            <section className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-brand-500" /> Lista de Fretes
+                </h3>
+                <div className="flex items-center gap-4">
                   <div className="relative">
-                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                     <input 
                       type="text"
-                      placeholder="Descrição, produto, origem..."
+                      placeholder="Buscar fretes..."
                       value={freightSearch}
                       onChange={(e) => setFreightSearch(e.target.value)}
-                      className={`w-full text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl pl-9 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
+                      className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 w-64"
                     />
                   </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5 min-w-[140px]">
-                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Status</label>
                   <select 
                     value={freightFilterStatus}
                     onChange={(e) => setFreightFilterStatus(e.target.value as any)}
-                    className={`w-full text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50 appearance-none`}
+                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/20"
                   >
                     <option value="Todos">Todos Status</option>
                     <option value="Aberto">Aberto</option>
                     <option value="Finalizado">Finalizado</option>
                   </select>
                 </div>
+              </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} ml-1`}>Data do Frete</label>
-                  <input 
-                    type="date"
-                    value={freightFilterDate}
-                    onChange={(e) => setFreightFilterDate(e.target.value)}
-                    className={`text-xs ${darkMode ? 'bg-black border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} border rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-neon/50`}
-                  />
+              <div className="glass-card rounded-3xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-100 dark:border-zinc-800">
+                        <th className="px-6 py-4 text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Data</th>
+                        <th className="px-6 py-4 text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Descrição</th>
+                        <th className="px-6 py-4 text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Rota</th>
+                        <th className="px-6 py-4 text-[10px] uppercase font-bold text-zinc-400 tracking-wider text-right">Peso</th>
+                        <th className="px-6 py-4 text-[10px] uppercase font-bold text-zinc-400 tracking-wider text-right">Saldo</th>
+                        <th className="px-6 py-4 text-[10px] uppercase font-bold text-zinc-400 tracking-wider text-center">Status</th>
+                        <th className="px-6 py-4 text-[10px] uppercase font-bold text-zinc-400 tracking-wider text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-50 dark:divide-zinc-900">
+                      {filteredFreights.map(f => {
+                        const freightLoadings = loadings.filter(l => l.freightId === f.id);
+                        const loadedWeight = freightLoadings.reduce((acc, curr) => acc + curr.weight, 0);
+                        const remainingWeight = f.totalWeight - loadedWeight;
+                        
+                        return (
+                          <tr key={f.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50 transition-colors group">
+                            <td className="px-6 py-4 text-xs font-medium text-zinc-500">
+                              {new Date(f.createdAt).toLocaleDateString('pt-BR')}
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="text-sm font-bold text-zinc-900 dark:text-white">{f.description}</p>
+                              <p className="text-[10px] text-zinc-400 font-medium">{f.product}</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                <span>{f.origin}</span>
+                                <ArrowRight className="w-3 h-3 text-zinc-300" />
+                                <span>{f.destination}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <p className="text-sm font-bold text-zinc-900 dark:text-white">{f.totalWeight.toLocaleString()} kg</p>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <p className={`text-sm font-bold ${remainingWeight > 0 ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-400'}`}>
+                                {remainingWeight.toLocaleString()} kg
+                              </p>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <StatusBadge status={f.status} />
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                  onClick={() => {
+                                    setEditingFreightId(f.id);
+                                    setEditFreightDesc(f.description);
+                                    setEditFreightProduct(f.product);
+                                    setEditFreightOrigin(f.origin);
+                                    setEditFreightDestination(f.destination);
+                                    setEditFreightTotalWeight(f.totalWeight.toString());
+                                    setEditFreightValorFrete(f.valorFrete.toString());
+                                    setEditFreightValorPagoMotorista(f.valorPagoMotorista.toString());
+                                    setEditFreightObservations(f.observations);
+                                    setEditFreightStatus(f.status);
+                                  }}
+                                  className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setDeletingId(f.id);
+                                    setDeletingType('freight');
+                                  }}
+                                  className="p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg text-zinc-400 hover:text-red-500 transition-all"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-
-                {(freightFilterStatus !== 'Todos' || freightFilterDate || freightSearch) && (
-                  <button 
-                    onClick={() => {
-                      setFreightFilterStatus('Todos');
-                      setFreightFilterDate('');
-                      setFreightSearch('');
-                    }}
-                    className={`mb-1 p-2.5 rounded-xl ${darkMode ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-zinc-400 hover:text-zinc-900'} border ${darkMode ? 'border-zinc-700' : 'border-zinc-200'} transition-colors`}
-                    title="Limpar Filtros"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between px-2">
-                <h2 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold flex items-center gap-2`}>
-                  <TrendingUp className="w-5 h-5 text-neon" /> Fretes em Andamento
-                </h2>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredFreights.map((f) => {
-                  const relatedLoadings = loadings.filter(l => l.freightId === f.id);
-                  const loadedWeight = relatedLoadings.reduce((acc, curr) => acc + curr.weight, 0);
-                  const progress = Math.min((loadedWeight / f.totalWeight) * 100, 100);
-
-                  return (
-                    <div 
-                      key={f.id} 
-                      onClick={() => setViewingFreightId(f.id)}
-                      className={`${darkMode ? 'bg-zinc-950 border-zinc-900 hover:border-neon/30' : 'bg-white border-zinc-200 hover:border-zinc-300'} border rounded-[2.5rem] p-8 space-y-6 shadow-sm transition-all cursor-pointer group relative overflow-hidden`}
-                    >
-                      <div className="absolute top-0 left-0 w-1.5 h-full bg-neon/10 group-hover:bg-neon transition-all duration-500" />
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className={`${darkMode ? 'text-white' : 'text-zinc-900'} font-bold`}>{f.description}</h3>
-                            <Eye className={`w-3 h-3 ${darkMode ? 'text-zinc-700 group-hover:text-neon' : 'text-zinc-300 group-hover:text-neon'} transition-colors`} />
-                          </div>
-                          <p className={`text-xs ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>{f.product} • {f.totalWeight.toLocaleString()} kg total</p>
-                          <div className={`flex items-center gap-2 mt-1 text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                            <span className={`${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'} px-1.5 py-0.5 rounded`}>{f.origin}</span>
-                            <ChevronRight className="w-3 h-3" />
-                            <span className={`${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'} px-1.5 py-0.5 rounded`}>{f.destination}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
-                            <>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  startEditingFreight(f);
-                                }}
-                                className={`${darkMode ? 'text-zinc-700 hover:text-neon' : 'text-zinc-300 hover:text-neon'} transition-colors p-1`}
-                                title="Editar Frete"
-                              >
-                                <FileText className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeletingId(f.id);
-                                  setDeletingType('freight');
-                                }}
-                                className={`${darkMode ? 'text-zinc-700 hover:text-red-500' : 'text-zinc-300 hover:text-red-500'} transition-colors p-1`}
-                                title="Excluir Frete"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
-                          <span className={`${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Progresso</span>
-                          <span className="text-neon">{loadedWeight.toLocaleString()} / {f.totalWeight.toLocaleString()} kg</span>
-                        </div>
-                        <div className={`h-2 ${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'} rounded-full overflow-hidden`}>
-                          <div 
-                            className="h-full bg-neon transition-all duration-500" 
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-0.5`}>Faturamento</span>
-                            <div className="text-xs font-bold text-green-600">R$ {((loadedWeight / 1000) * (f.valorFrete || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                          </div>
-                          <div>
-                            <span className={`text-[9px] uppercase font-bold ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} block mb-0.5`}>Lucro</span>
-                            <div className={`text-xs font-bold ${((loadedWeight / 1000) * ((f.valorFrete || 0) - (f.valorPagoMotorista || 0))) >= 0 ? 'text-neon' : 'text-red-500'}`}>
-                              R$ {((loadedWeight / 1000) * ((f.valorFrete || 0) - (f.valorPagoMotorista || 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </div>
-                          </div>
-                        </div>
-                        <div className={`text-[10px] px-2 py-1 rounded-lg font-bold ${f.status === 'Aberto' ? 'bg-neon/10 text-neon' : 'bg-green-500/10 text-green-500'}`}>
-                          {f.status}
-                        </div>
-                      </div>
-
-                      <div className={`flex items-center justify-between text-[10px] ${darkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                        <div className="flex items-center gap-2">
-                          <Truck className="w-3 h-3" />
-                          <span>{relatedLoadings.length} motoristas vinculados</span>
-                        </div>
-                        {f.observations && (
-                          <div className="flex items-center gap-1 text-neon">
-                            <FileText className="w-3 h-3" />
-                            <span>Obs</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {filteredFreights.length === 0 && (
-                  <div className={`text-center py-20 border-2 border-dashed ${darkMode ? 'border-zinc-800' : 'border-zinc-100'} rounded-3xl col-span-full`}>
-                    <p className={`${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>Nenhum frete encontrado com os filtros atuais.</p>
-                  </div>
-                )}
               </div>
             </section>
           </div>
@@ -3526,6 +3452,7 @@ function MainApp() {
           </section>
         </div>
       )}
+      </div>
     </main>
 
         {/* Modal de Detalhes do Frete */}
@@ -3935,22 +3862,75 @@ function MainApp() {
   );
 }
 
-function SummaryCard({ label, value, color, darkMode }: { label: string, value: string, color: string, darkMode: boolean }) {
+function SummaryCard({ 
+  label, 
+  value, 
+  icon: Icon, 
+  trend, 
+  color = "zinc",
+  className = "" 
+}: { 
+  label: string, 
+  value: string, 
+  icon?: any, 
+  trend?: string, 
+  color?: "green" | "red" | "blue" | "zinc" | "brand",
+  className?: string
+}) {
+  const colorMap = {
+    green: "text-green-600 dark:text-green-400 bg-green-500/10 glow-green",
+    red: "text-red-600 dark:text-red-400 bg-red-500/10 glow-red",
+    blue: "text-blue-600 dark:text-blue-400 bg-blue-500/10 glow-blue",
+    zinc: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 glow-zinc",
+    brand: "text-brand-600 dark:text-brand-400 bg-brand-500/10 glow-green",
+  };
+
+  const iconColorMap = {
+    green: "text-green-500",
+    red: "text-red-500",
+    blue: "text-blue-500",
+    zinc: "text-zinc-500",
+    brand: "text-brand-500",
+  };
+
   return (
-    <div className={`${darkMode ? 'bg-zinc-950 border-zinc-900' : 'bg-white border-zinc-200'} border p-6 rounded-3xl shadow-sm transition-all hover:border-neon/50 group relative overflow-hidden hover:shadow-[0_0_20px_rgba(0,255,0,0.1)]`}>
-      <div className="absolute top-0 left-0 w-1.5 h-full bg-neon/10 group-hover:bg-neon transition-all duration-500 shadow-[0_0_10px_rgba(0,255,0,0.3)]" />
-      <div className="flex flex-col gap-1 relative z-10">
-        <span className={`text-[10px] uppercase font-black tracking-[0.2em] ${darkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>
-          {label}
-        </span>
-        <div className={`text-2xl font-black font-display tracking-tight ${color}`}>
-          {value}
-        </div>
+    <div className={`glass-card p-6 rounded-3xl flex flex-col gap-4 transition-all hover:translate-y-[-2px] ${className}`}>
+      <div className="flex items-center justify-between">
+        {Icon && (
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${colorMap[color]}`}>
+            <Icon className={`w-6 h-6 ${iconColorMap[color]}`} />
+          </div>
+        )}
+        {trend && (
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${trend.startsWith('+') ? 'bg-green-100 text-green-600 dark:bg-green-500/10 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}>
+            {trend}
+          </span>
+        )}
       </div>
-      <div className="absolute -bottom-4 -right-4 opacity-[0.03] group-hover:opacity-[0.08] transition-all duration-700 transform group-hover:scale-110 group-hover:-rotate-12">
-        <Activity className="w-24 h-24 text-neon" />
+      <div>
+        <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-[0.1em]">{label}</p>
+        <p className="text-2xl font-bold mt-1 tracking-tight">{value}</p>
       </div>
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const getStyles = () => {
+    switch (status) {
+      case 'Aberto': return 'bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400';
+      case 'Finalizado': return 'bg-green-100 text-green-600 dark:bg-green-500/10 dark:text-green-400';
+      case 'Cancelado': return 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400';
+      case 'Manifesto': return 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400';
+      case 'Descarregado': return 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400';
+      default: return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-500/10 dark:text-zinc-400';
+    }
+  };
+
+  return (
+    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStyles()}`}>
+      {status}
+    </span>
   );
 }
 
@@ -3988,26 +3968,81 @@ function StatusButton({ active, label, onClick, darkMode, disabled }: { active: 
   );
 }
 
-function SidebarItem({ icon: Icon, label, active, onClick, darkMode }: { icon: any, label: string, active: boolean, onClick: () => void, darkMode: boolean }) {
+function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) {
   return (
-    <button 
+    <button
       onClick={onClick}
-      className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group relative overflow-hidden ${
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
         active 
-          ? 'bg-neon text-black shadow-[0_0_20px_rgba(0,255,0,0.2)]' 
-          : `${darkMode ? 'text-zinc-500 hover:text-white hover:bg-zinc-900' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`
+          ? 'bg-zinc-900 text-white shadow-lg shadow-zinc-900/10 dark:bg-white dark:text-zinc-900 dark:shadow-white/5' 
+          : 'text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900'
       }`}
     >
+      <Icon className={`w-5 h-5 transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
+      <span className="font-medium text-sm tracking-tight">{label}</span>
       {active && (
-        <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-50" />
-      )}
-      <Icon className={`w-5 h-5 transition-transform duration-500 ${active ? 'scale-110' : 'group-hover:scale-110 group-hover:text-neon'}`} />
-      <span className={`text-xs font-black uppercase tracking-widest transition-all ${active ? 'translate-x-1' : 'group-hover:translate-x-1'}`}>{label}</span>
-      
-      {!active && (
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-neon group-hover:h-1/2 transition-all duration-300 rounded-l-full" />
+        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
       )}
     </button>
+  );
+}
+
+function TopBar({ 
+  userProfile, 
+  darkMode, 
+  setDarkMode, 
+  globalSearch, 
+  setGlobalSearch,
+  handleLogout 
+}: { 
+  userProfile: UserProfile | null, 
+  darkMode: boolean, 
+  setDarkMode: (v: boolean) => void,
+  globalSearch: string,
+  setGlobalSearch: (v: string) => void,
+  handleLogout: () => void
+}) {
+  return (
+    <header className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 glass-card border-b-0 rounded-none">
+      <div className="flex items-center gap-4 flex-1 max-w-xl">
+        <div className="relative w-full group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 group-focus-within:text-zinc-900 dark:group-focus-within:text-white transition-colors" />
+          <input 
+            type="text" 
+            placeholder="Pesquisar fretes, motoristas, placas..." 
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-zinc-100 dark:bg-zinc-900 border-none rounded-xl text-sm focus:ring-2 focus:ring-zinc-900/5 dark:focus:ring-white/5 outline-none transition-all"
+          />
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-4 ml-8">
+        <button 
+          onClick={() => setDarkMode(!darkMode)}
+          className="p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl transition-colors"
+          title={darkMode ? "Modo Claro" : "Modo Escuro"}
+        >
+          {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
+        
+        <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800 mx-2" />
+        
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-bold text-zinc-900 dark:text-white leading-none">{userProfile?.name}</p>
+            <p className="text-[10px] uppercase font-bold text-zinc-400 mt-1 tracking-wider">{userProfile?.role}</p>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
+            title="Sair do Sistema"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    </header>
   );
 }
 
