@@ -1094,7 +1094,7 @@ function MainApp() {
                 </button>
                 <button 
                   onClick={() => { setShowLanding(false); setAuthMode('login'); }}
-                  className="w-full sm:w-auto px-10 py-5 bg-zinc-900 text-white font-bold rounded-2xl border border-zinc-800 hover:bg-zinc-800 transition-all"
+                  className="w-full sm:w-auto px-10 py-5 bg-black text-neon font-bold rounded-2xl border border-neon/30 hover:border-neon hover:bg-neon/5 transition-all shadow-lg shadow-neon/5"
                 >
                   Ver Demonstração
                 </button>
@@ -1102,30 +1102,30 @@ function MainApp() {
               
               {/* Mock Dashboard Preview - Inspired by the provided image */}
               <div className="pt-16">
-                <div className="relative mx-auto max-w-5xl bg-[#1a1a1a] rounded-[2rem] p-6 shadow-2xl shadow-neon/10 overflow-hidden border border-zinc-800/50">
-                  <div className="bg-[#121212] rounded-2xl aspect-video flex items-center justify-center relative overflow-hidden border border-zinc-800/30">
+                <div className="relative mx-auto max-w-5xl bg-black rounded-[2rem] p-6 shadow-2xl shadow-neon/10 overflow-hidden border border-neon/20">
+                  <div className="bg-[#050505] rounded-2xl aspect-video flex items-center justify-center relative overflow-hidden border border-neon/10">
                     <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-neon via-transparent to-transparent"></div>
                     
                     <div className="grid grid-cols-12 gap-4 p-8 w-full h-full">
                       {/* Left Sidebar Mock */}
-                      <div className="col-span-8 bg-[#1a1a1a]/50 rounded-2xl border border-zinc-800/50 p-8 space-y-6">
-                        <div className="h-4 w-1/3 bg-zinc-800 rounded-full"></div>
+                      <div className="col-span-8 bg-black/50 rounded-2xl border border-neon/10 p-8 space-y-6">
+                        <div className="h-4 w-1/3 bg-neon/20 rounded-full"></div>
                         <div className="space-y-3">
-                          <div className="h-2 w-full bg-zinc-800/50 rounded-full"></div>
-                          <div className="h-2 w-full bg-zinc-800/50 rounded-full"></div>
-                          <div className="h-2 w-2/3 bg-zinc-800/50 rounded-full"></div>
+                          <div className="h-2 w-full bg-neon/10 rounded-full"></div>
+                          <div className="h-2 w-full bg-neon/10 rounded-full"></div>
+                          <div className="h-2 w-2/3 bg-neon/10 rounded-full"></div>
                         </div>
                         <div className="grid grid-cols-3 gap-4 pt-8">
-                          <div className="h-24 bg-zinc-800/30 rounded-xl border border-zinc-800/20"></div>
-                          <div className="h-24 bg-zinc-800/30 rounded-xl border border-zinc-800/20"></div>
-                          <div className="h-24 bg-zinc-800/30 rounded-xl border border-zinc-800/20"></div>
+                          <div className="h-24 bg-neon/5 rounded-xl border border-neon/10"></div>
+                          <div className="h-24 bg-neon/5 rounded-xl border border-neon/10"></div>
+                          <div className="h-24 bg-neon/5 rounded-xl border border-neon/10"></div>
                         </div>
                       </div>
                       
                       {/* Right Sidebar Mock */}
                       <div className="col-span-4 space-y-4">
-                        <div className="h-40 bg-[#1a1a1a]/50 rounded-2xl border border-zinc-800/50 p-6 flex flex-col items-center justify-center relative overflow-hidden">
-                          <div className="h-3 w-1/2 bg-zinc-800 rounded-full mb-6"></div>
+                        <div className="h-40 bg-black/50 rounded-2xl border border-neon/10 p-6 flex flex-col items-center justify-center relative overflow-hidden">
+                          <div className="h-3 w-1/2 bg-neon/20 rounded-full mb-6"></div>
                           {/* Neon Circle from image */}
                           <div className="relative">
                             <div className="absolute inset-0 bg-neon/20 blur-xl rounded-full"></div>
@@ -1134,12 +1134,12 @@ function MainApp() {
                             </div>
                           </div>
                         </div>
-                        <div className="h-40 bg-[#1a1a1a]/50 rounded-2xl border border-zinc-800/50 p-6">
-                          <div className="h-3 w-1/2 bg-zinc-800 rounded-full mb-6"></div>
+                        <div className="h-40 bg-black/50 rounded-2xl border border-neon/10 p-6">
+                          <div className="h-3 w-1/2 bg-neon/20 rounded-full mb-6"></div>
                           <div className="space-y-3">
-                            <div className="h-2 w-full bg-zinc-800/50 rounded-full"></div>
-                            <div className="h-2 w-full bg-zinc-800/50 rounded-full"></div>
-                            <div className="h-2 w-3/4 bg-zinc-800/50 rounded-full"></div>
+                            <div className="h-2 w-full bg-neon/10 rounded-full"></div>
+                            <div className="h-2 w-full bg-neon/10 rounded-full"></div>
+                            <div className="h-2 w-3/4 bg-neon/10 rounded-full"></div>
                           </div>
                         </div>
                       </div>
@@ -1151,7 +1151,7 @@ function MainApp() {
           </section>
 
           {/* Benefits Section */}
-          <section className="py-32 bg-zinc-950 px-6 relative overflow-hidden">
+          <section className="py-32 bg-black px-6 relative overflow-hidden">
             <div className="absolute top-0 left-1/4 w-96 h-96 bg-neon/5 blur-[120px] rounded-full" />
             <div className="max-w-7xl mx-auto space-y-20 relative z-10">
               <div className="text-center space-y-4">
@@ -1165,9 +1165,9 @@ function MainApp() {
                   { icon: <Activity className="w-6 h-6" />, title: "Tempo Real", desc: "Acompanhe o status de cada frete e carregamento instantaneamente." },
                   { icon: <FileText className="w-6 h-6" />, title: "Relatórios", desc: "Exporte relatórios detalhados em PDF para análise e prestação de contas." }
                 ].map((benefit, i) => (
-                  <div key={i} className="bg-black/40 backdrop-blur-sm p-10 rounded-[2.5rem] border border-zinc-900 shadow-sm hover:border-neon/30 transition-all group relative overflow-hidden">
+                  <div key={i} className="bg-black/40 backdrop-blur-sm p-10 rounded-[2.5rem] border border-neon/10 shadow-sm hover:border-neon/40 transition-all group relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-neon/5 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-neon/10 transition-colors" />
-                    <div className="w-14 h-14 bg-zinc-900 text-neon rounded-2xl flex items-center justify-center mb-8 group-hover:bg-neon group-hover:text-black transition-all duration-500 transform group-hover:rotate-6">
+                    <div className="w-14 h-14 bg-black text-neon border border-neon/20 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-neon group-hover:text-black transition-all duration-500 transform group-hover:rotate-6 shadow-lg shadow-neon/10">
                       {benefit.icon}
                     </div>
                     <h3 className="text-2xl font-bold text-white mb-3 font-display">{benefit.title}</h3>
@@ -1208,7 +1208,7 @@ function MainApp() {
                 </button>
               </div>
               <div className="relative">
-                <div className="aspect-square bg-zinc-900 rounded-[4rem] overflow-hidden relative border border-zinc-800">
+                <div className="aspect-square bg-black rounded-[4rem] overflow-hidden relative border border-neon/10">
                   <img 
                     src="https://picsum.photos/seed/logistics-dark/800/800" 
                     alt="Logística" 
@@ -1216,7 +1216,7 @@ function MainApp() {
                     referrerPolicy="no-referrer"
                   />
                   <div className="absolute inset-0 bg-gradient-to-tr from-neon/20 to-transparent"></div>
-                  <div className="absolute bottom-8 left-8 right-8 bg-zinc-900/90 backdrop-blur p-8 rounded-3xl border border-zinc-800 shadow-2xl">
+                  <div className="absolute bottom-8 left-8 right-8 bg-black/90 backdrop-blur p-8 rounded-3xl border border-neon/20 shadow-2xl">
                     <div className="flex items-center gap-6">
                       <div className="w-14 h-14 bg-neon rounded-2xl flex items-center justify-center text-black shadow-lg shadow-neon/30">
                         <TrendingUp className="w-7 h-7" />
@@ -1234,7 +1234,7 @@ function MainApp() {
 
           {/* CTA Section */}
           <section className="py-24 px-6 bg-black">
-            <div className="max-w-5xl mx-auto bg-zinc-900 rounded-[3rem] p-12 md:p-20 text-center space-y-8 relative overflow-hidden border border-zinc-800">
+            <div className="max-w-5xl mx-auto bg-black rounded-[3rem] p-12 md:p-20 text-center space-y-8 relative overflow-hidden border border-neon/20 shadow-2xl shadow-neon/5">
               <div className="absolute top-0 left-0 w-full h-full opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-neon via-transparent to-transparent"></div>
               <h2 className="text-4xl md:text-5xl font-black text-white leading-tight relative z-10">
                 Pronto para transformar sua logística?
@@ -1251,7 +1251,7 @@ function MainApp() {
                 </button>
                 <button 
                   onClick={() => { setShowLanding(false); setAuthMode('login'); }}
-                  className="w-full sm:w-auto px-10 py-5 bg-zinc-800 text-white font-bold rounded-2xl hover:bg-zinc-700 transition-all"
+                  className="w-full sm:w-auto px-10 py-5 bg-black text-white border border-neon/30 font-bold rounded-2xl hover:bg-neon/5 transition-all"
                 >
                   Falar com Consultor
                 </button>
@@ -1282,12 +1282,12 @@ function MainApp() {
 
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6 selection:bg-neon selection:text-black font-sans">
-        <div className="max-w-md w-full bg-zinc-950 rounded-[3rem] shadow-2xl p-12 space-y-10 border border-zinc-900 relative overflow-hidden">
+        <div className="max-w-md w-full bg-black rounded-[3rem] shadow-2xl p-12 space-y-10 border border-neon/20 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1.5 bg-neon shadow-[0_0_15px_rgba(0,255,0,0.5)]"></div>
           
           <button 
             onClick={() => setShowLanding(true)}
-            className="absolute top-10 left-10 text-zinc-600 hover:text-neon transition-colors p-2 bg-zinc-900 rounded-xl"
+            className="absolute top-10 left-10 text-neon/50 hover:text-neon transition-colors p-2 bg-black border border-neon/10 rounded-xl"
           >
             <ArrowRight className="w-4 h-4 rotate-180" />
           </button>
@@ -1297,17 +1297,17 @@ function MainApp() {
               <Truck className="text-black w-10 h-10" />
             </div>
             <h1 className="text-3xl font-black text-white tracking-tighter uppercase">Controle de Frete</h1>
-            <p className="text-zinc-500 font-medium">{authMode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta neon'}</p>
+            <p className="text-neon/60 font-medium tracking-widest text-[10px] uppercase">{authMode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta neon'}</p>
           </div>
 
           <form onSubmit={handleEmailAuth} className="space-y-5">
             {authMode === 'signup' && (
               <div className="space-y-2">
-                <label className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em] ml-1">Nome Completo</label>
+                <label className="text-[10px] uppercase font-black text-neon/40 tracking-[0.2em] ml-1">Nome Completo</label>
                 <input 
                   type="text"
                   required
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
+                  className="w-full bg-black border border-neon/20 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
                   placeholder="Seu nome"
                   value={authName}
                   onChange={(e) => setAuthName(e.target.value)}
@@ -1315,22 +1315,22 @@ function MainApp() {
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em] ml-1">E-mail Corporativo</label>
+              <label className="text-[10px] uppercase font-black text-neon/40 tracking-[0.2em] ml-1">E-mail Corporativo</label>
               <input 
                 type="email"
                 required
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
+                className="w-full bg-black border border-neon/20 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
                 placeholder="seu@email.com"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em] ml-1">Senha Segura</label>
+              <label className="text-[10px] uppercase font-black text-neon/40 tracking-[0.2em] ml-1">Senha Segura</label>
               <input 
                 type="password"
                 required
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
+                className="w-full bg-black border border-neon/20 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
                 placeholder="••••••••"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
@@ -1346,26 +1346,26 @@ function MainApp() {
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-zinc-900"></span>
+              <span className="w-full border-t border-neon/10"></span>
             </div>
             <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
-              <span className="bg-zinc-950 px-4 text-zinc-600">Acesso Rápido</span>
+              <span className="bg-black px-4 text-neon/30">Acesso Rápido</span>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={handleLogin}
-              className="py-4 bg-zinc-900 border border-zinc-800 text-white font-bold rounded-2xl hover:border-neon/50 transition-all flex items-center justify-center gap-3 group"
+              className="py-4 bg-black border border-neon/10 text-white font-bold rounded-2xl hover:border-neon/50 transition-all flex items-center justify-center gap-3 group"
             >
               <img src="https://www.google.com/favicon.ico" className="w-5 h-5 grayscale group-hover:grayscale-0 transition-all" alt="Google" />
               Google
             </button>
             <button
               onClick={handleGithubLogin}
-              className="py-4 bg-zinc-900 border border-zinc-800 text-white font-bold rounded-2xl hover:border-neon/50 transition-all flex items-center justify-center gap-3 group"
+              className="py-4 bg-black border border-neon/10 text-white font-bold rounded-2xl hover:border-neon/50 transition-all flex items-center justify-center gap-3 group"
             >
-              <Users className="w-5 h-5 text-zinc-500 group-hover:text-neon transition-all" />
+              <Users className="w-5 h-5 text-neon/40 group-hover:text-neon transition-all" />
               GitHub
             </button>
           </div>
@@ -1373,7 +1373,7 @@ function MainApp() {
           <div className="text-center">
             <button 
               onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-              className="text-xs font-black uppercase tracking-widest text-zinc-600 hover:text-neon transition-colors"
+              className="text-xs font-black uppercase tracking-widest text-neon/40 hover:text-neon transition-colors"
             >
               {authMode === 'login' ? 'Solicitar Acesso' : 'Já possuo conta'}
             </button>
@@ -1386,7 +1386,7 @@ function MainApp() {
           )}
           
           <div className="text-center pt-4">
-            <p className="text-[10px] text-zinc-700 uppercase tracking-[0.3em] font-black">Logística de Alta Performance</p>
+            <p className="text-[10px] text-neon/20 uppercase tracking-[0.3em] font-black">Logística de Alta Performance</p>
           </div>
         </div>
       </div>
