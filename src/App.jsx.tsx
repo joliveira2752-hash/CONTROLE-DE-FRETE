@@ -390,4 +390,4 @@ export default function App() {
     </div>
   )
 }dist
-atualizar
+<div className="absolute inset-0">
