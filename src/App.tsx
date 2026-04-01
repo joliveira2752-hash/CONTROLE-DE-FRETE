@@ -56,7 +56,8 @@ import {
   Eye,
   DollarSign,
   Filter,
-  Search
+  Search,
+  Clock
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { 
@@ -409,7 +410,7 @@ function MainApp() {
   };
 
   useEffect(() => {
-    if (!user || !userProfile) {
+    if (!user) {
       setBranches([]);
       setAllUsers([]);
       return;
@@ -417,14 +418,17 @@ function MainApp() {
 
     const fetchInitialData = async () => {
       try {
-        if (userProfile.role === 'master') {
+        // Se não tem perfil ou é master ou não tem filial vinculada, busca todas as filiais
+        if (!userProfile || userProfile.role === 'master' || !userProfile.branchId) {
           const branchesQuery = query(collection(db, 'branches'), orderBy('name'));
           const branchesSnap = await getDocs(branchesQuery);
           setBranches(branchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
 
-          const usersQuery = query(collection(db, 'users'), orderBy('name'));
-          const usersSnap = await getDocs(usersQuery);
-          setAllUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
+          if (userProfile?.role === 'master') {
+            const usersQuery = query(collection(db, 'users'), orderBy('name'));
+            const usersSnap = await getDocs(usersQuery);
+            setAllUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
+          }
         } else if (userProfile.branchId) {
           const branchDoc = await getDoc(doc(db, 'branches', userProfile.branchId));
           if (branchDoc.exists()) {
@@ -524,10 +528,10 @@ function MainApp() {
       await setDoc(doc(db, 'users', user.uid), {
         id: user.uid,
         email: user.email?.toLowerCase(),
-        name: user.displayName || 'Usuário',
+        name: userProfile?.name || user.displayName || 'Usuário',
         role: 'user',
         branchId: branchId,
-        approved: true
+        approved: false
       }, { merge: true });
       fetchUserProfile(user.uid, user.email!, user.displayName || 'Usuário');
     } catch (error) {
@@ -1393,54 +1397,85 @@ function MainApp() {
     );
   }
 
-  if (user && !userProfile) {
+  if (user && (!userProfile || (userProfile.role !== 'master' && !userProfile.branchId))) {
     return (
-      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center space-y-6">
-          <div className="w-16 h-16 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mx-auto">
-            <Package className="w-8 h-8" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-zinc-900">Bem-vindo!</h2>
-            <p className="text-zinc-500">Para começar, selecione a filial onde você trabalha.</p>
+      <div className="min-h-screen bg-black flex items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full bg-black rounded-[3rem] shadow-2xl p-12 space-y-10 border border-neon/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-neon shadow-[0_0_15px_rgba(0,255,0,0.5)]"></div>
+          
+          <div className="text-center space-y-3">
+            <div className="w-20 h-20 bg-neon rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-neon/40 transform rotate-3">
+              <Truck className="text-black w-10 h-10" />
+            </div>
+            <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Bem-vindo!</h2>
+            <p className="text-neon/60 font-medium tracking-widest text-[10px] uppercase">Selecione sua unidade de trabalho</p>
           </div>
           
           <div className="space-y-4">
             <div className="text-left">
-              <label className="text-[10px] uppercase font-bold text-zinc-400 ml-1">Sua Filial</label>
+              <label className="text-[10px] uppercase font-black text-neon/40 tracking-[0.2em] ml-1">Sua Filial</label>
               <select 
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/50"
+                className="w-full bg-black border border-neon/20 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all appearance-none"
                 value={requestBranchId}
                 onChange={(e) => {
                   setRequestBranchId(e.target.value);
                   setRequestError(null);
                 }}
               >
-                <option value="">Selecione uma filial...</option>
+                <option value="" className="bg-black text-white">Selecione uma filial...</option>
                 {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
+                  <option key={b.id} value={b.id} className="bg-black text-white">{b.name}</option>
                 ))}
               </select>
             </div>
 
             {requestError && (
-              <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
-                <p className="text-xs text-red-600 font-medium">{requestError}</p>
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold">
+                {requestError}
               </div>
             )}
 
             <button 
               onClick={() => handleRequestAccess(requestBranchId)}
               disabled={!requestBranchId}
-              className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-green-900/20"
+              className="w-full py-5 bg-neon text-black font-black uppercase tracking-widest rounded-2xl hover:bg-neon/90 transition-all shadow-xl shadow-neon/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Entrar no Sistema
             </button>
           </div>
           
-          <div className="pt-4 border-t border-zinc-100 flex flex-col gap-3">
-            <p className="text-[10px] text-zinc-400">E-mail logado: <span className="font-bold">{user.email}</span></p>
-            <button onClick={handleLogout} className="text-zinc-500 hover:text-zinc-900 font-bold text-sm">Sair e tentar outro e-mail</button>
+          <div className="pt-6 border-t border-neon/10 flex flex-col gap-4">
+            <p className="text-[10px] text-neon/30 uppercase tracking-widest font-bold">E-mail logado: <span className="text-neon/60">{user.email}</span></p>
+            <button onClick={handleLogout} className="text-xs font-black uppercase tracking-widest text-neon/40 hover:text-neon transition-colors">Sair e tentar outro e-mail</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && userProfile && !userProfile.approved && userProfile.role !== 'master') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full bg-black rounded-[3rem] shadow-2xl p-12 space-y-10 border border-neon/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-neon shadow-[0_0_15px_rgba(0,255,0,0.5)]"></div>
+          
+          <div className="text-center space-y-3">
+            <div className="w-20 h-20 bg-neon rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-neon/40 transform rotate-3">
+              <Clock className="text-black w-10 h-10" />
+            </div>
+            <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Aguardando Aprovação</h2>
+            <p className="text-neon/60 font-medium tracking-widest text-[10px] uppercase">Sua conta está em análise</p>
+          </div>
+          
+          <div className="space-y-4">
+            <p className="text-neon/60 text-sm leading-relaxed">
+              Seu cadastro foi recebido com sucesso. Por favor, aguarde enquanto um administrador revisa e aprova seu acesso ao sistema.
+            </p>
+          </div>
+          
+          <div className="pt-6 border-t border-neon/10 flex flex-col gap-4">
+            <p className="text-[10px] text-neon/30 uppercase tracking-widest font-bold">E-mail logado: <span className="text-neon/60">{user.email}</span></p>
+            <button onClick={handleLogout} className="text-xs font-black uppercase tracking-widest text-neon/40 hover:text-neon transition-colors">Sair e tentar outro e-mail</button>
           </div>
         </div>
       </div>
