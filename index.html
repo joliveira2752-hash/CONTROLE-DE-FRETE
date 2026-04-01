@@ -17,7 +17,7 @@
       window.onerror = function(msg, url, line, col, error) {
         var errorDiv = document.getElementById('error-msg');
         if (errorDiv) {
-          errorDiv.innerHTML = 'Erro ao carregar: ' + msg + '<br><small>Verifique se a pasta "assets" foi enviada corretamente.</small>';
+          errorDiv.innerHTML = 'Erro ao carregar: ' + msg + '<br><small>Verifique se a pasta "assets" foi enviada corretamente para dentro da public_html.</small>';
         }
         return false;
       };
@@ -27,7 +27,7 @@
         if (loadingScreen && !window.appInitialized) {
           var errorDiv = document.getElementById('error-msg');
           if (errorDiv && errorDiv.innerHTML === '') {
-            errorDiv.innerHTML = 'O carregamento está demorando mais que o normal.<br>Certifique-se de que todos os arquivos da pasta "dist" foram enviados.';
+            errorDiv.innerHTML = 'O carregamento está demorando mais que o normal.<br><b>DICA:</b> Certifique-se de que você copiou os ARQUIVOS de dentro da pasta "dist" para a "public_html", e não a pasta "dist" inteira.';
           }
         }
       }, 10000);
