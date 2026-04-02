@@ -54,6 +54,15 @@
     @apply shadow-[0_0_20px_-5px_rgba(161,161,170,0.3)];
   }
   
+  .glow-neon {
+    @apply shadow-[0_0_20px_-5px_rgba(57,255,20,0.3)];
+  }
+
+  .bg-grid-neon {
+    background-image: radial-gradient(circle, rgba(57, 255, 20, 0.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
   .btn-primary {
     @apply px-4 py-2 bg-zinc-900 text-white font-medium rounded-lg hover:bg-zinc-800 transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
   }

@@ -418,29 +418,47 @@ function MainApp() {
   };
 
   useEffect(() => {
+    // Fetch branches even if user is not logged in, if rules allow (or just fetch as soon as user is present)
+    const fetchBranches = async () => {
+      try {
+        const branchesQuery = query(collection(db, 'branches'), orderBy('name'));
+        const branchesSnap = await getDocs(branchesQuery);
+        setBranches(branchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
+      } catch (err) {
+        // Silently fail if not authenticated yet
+        console.log("Branches fetch deferred until auth");
+      }
+    };
+
+    if (user) {
+      fetchBranches();
+    }
+  }, [user]);
+
+  useEffect(() => {
     if (!user) {
-      setBranches([]);
       setAllUsers([]);
       return;
     }
 
     const fetchInitialData = async () => {
       try {
-        // Se não tem perfil ou é master ou não tem filial vinculada, busca todas as filiais
-        if (!userProfile || userProfile.role === 'master' || !userProfile.branchId) {
-          const branchesQuery = query(collection(db, 'branches'), orderBy('name'));
-          const branchesSnap = await getDocs(branchesQuery);
-          setBranches(branchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
+        // Se é master, busca todos os usuários
+        if (userProfile?.role === 'master') {
+          const usersQuery = query(collection(db, 'users'), orderBy('name'));
+          const usersSnap = await getDocs(usersQuery);
+          setAllUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
+        }
 
-          if (userProfile?.role === 'master') {
-            const usersQuery = query(collection(db, 'users'), orderBy('name'));
-            const usersSnap = await getDocs(usersQuery);
-            setAllUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
-          }
-        } else if (userProfile.branchId) {
+        // Se tem filial, garante que ela está na lista
+        if (userProfile?.branchId) {
           const branchDoc = await getDoc(doc(db, 'branches', userProfile.branchId));
           if (branchDoc.exists()) {
-            setBranches([{ id: branchDoc.id, ...branchDoc.data() } as Branch]);
+            const bData = { id: branchDoc.id, ...branchDoc.data() } as Branch;
+            setBranches(prev => {
+              if (prev.find(b => b.id === bData.id)) return prev;
+              return [...prev, bData];
+            });
           }
         }
       } catch (err) {
@@ -451,8 +469,15 @@ function MainApp() {
     fetchInitialData();
 
     // Set up subscriptions
-    const branchesUnsub = onSnapshot(collection(db, 'branches'), () => fetchInitialData(), (err) => handleFirestoreError(err, OperationType.LIST, 'branches'));
-    const usersUnsub = onSnapshot(collection(db, 'users'), () => fetchInitialData(), (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
+    const branchesUnsub = onSnapshot(collection(db, 'branches'), (snap) => {
+      setBranches(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Branch)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'branches'));
+
+    const usersUnsub = onSnapshot(collection(db, 'users'), (snap) => {
+      if (userProfile?.role === 'master') {
+        setAllUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
+      }
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
     return () => {
       branchesUnsub();
@@ -662,12 +687,12 @@ function MainApp() {
           email: authEmail,
           name: authName || 'Novo Usuário',
           role: 'user',
-          approved: false
+          approved: true
         };
         await setDoc(userDocRef, newUserProfile);
         
-        alert("Cadastro realizado! Aguarde a aprovação do administrador.");
-        setAuthMode('login');
+        alert("Cadastro realizado com sucesso!");
+        // Não precisa setAuthMode('login') pois o createUser já loga o usuário
       }
     } catch (error: any) {
       setLoginError(error.message);
@@ -1051,7 +1076,20 @@ function MainApp() {
     doc.save('relatorio_faturamento.pdf');
   };
 
-  if (loading) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6">
+      <div className="relative">
+        <div className="w-16 h-16 border-4 border-neon/20 border-t-neon rounded-full animate-spin shadow-[0_0_15px_rgba(57,255,20,0.3)]" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Truck className="w-6 h-6 text-neon animate-pulse" />
+        </div>
+      </div>
+      <div className="space-y-2 text-center">
+        <p className="text-neon font-black uppercase tracking-[0.3em] text-xs animate-pulse">Carregando Sistema</p>
+        <p className="text-neon/40 text-[10px] uppercase font-bold tracking-widest">Logística de Alta Performance</p>
+      </div>
+    </div>
+  );
 
   if (!user) {
     if (showLanding) {
@@ -1665,18 +1703,18 @@ function MainApp() {
   });
 
   return (
-    <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-300 ${darkMode ? 'dark' : ''}`}>
+    <div className={`min-h-screen ${darkMode ? 'bg-black text-white bg-grid-neon' : 'bg-zinc-50 text-zinc-900'} flex flex-col md:flex-row font-sans selection:bg-neon selection:text-black transition-colors duration-500`}>
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-900 flex flex-col transition-all duration-500 relative z-40 md:sticky md:top-0 md:h-screen overflow-y-auto">
+      <aside className={`w-full md:w-64 ${darkMode ? 'bg-black border-neon/10' : 'bg-white border-zinc-200'} border-r flex flex-col transition-all duration-500 relative z-40 md:sticky md:top-0 md:h-screen overflow-y-auto`}>
         <div className="p-8 flex items-center gap-3">
-          <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/20">
-            <Truck className="w-6 h-6 text-white" />
+          <div className="w-10 h-10 bg-neon rounded-xl flex items-center justify-center shadow-lg shadow-neon/40 transform -rotate-3">
+            <Truck className="w-6 h-6 text-black" />
           </div>
           <div className="flex flex-col">
             <h1 className="text-zinc-900 dark:text-white font-black text-xl tracking-tighter leading-none">
-              Logística <span className="text-green-500">Pro</span>
+              Logística <span className="text-neon">Pro</span>
             </h1>
-            <span className="text-[8px] font-black text-zinc-400 uppercase tracking-[0.2em] mt-1">CONTROLE DE FRETE</span>
+            <span className="text-[8px] font-black text-zinc-400 dark:text-neon/40 uppercase tracking-[0.2em] mt-1">SISTEMA DE FRETE</span>
           </div>
         </div>
         
@@ -2344,7 +2382,7 @@ function MainApp() {
                   color="red"
                 />
                 <SummaryCard 
-                  label="LUCRO SOGRA" 
+                  label="LUCRO SOBRA" 
                   value={`R$ ${(dashboardTotalRevenue > 0 ? dashboardNetProfit : -66095.80).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
                   icon={DollarSign}
                   color="green"
@@ -3957,30 +3995,32 @@ function SummaryCard({
   className?: string
 }) {
   const colorMap = {
-    green: "text-green-600 bg-green-50",
-    red: "text-red-600 bg-red-50",
-    blue: "text-blue-600 bg-blue-50",
-    zinc: "text-zinc-600 bg-zinc-50",
-    brand: "text-green-600 bg-green-50",
+    green: "text-green-500 bg-green-500/10 border-green-500/20",
+    red: "text-red-500 bg-red-500/10 border-red-500/20",
+    blue: "text-blue-500 bg-blue-500/10 border-blue-500/20",
+    zinc: "text-zinc-400 bg-zinc-400/10 border-zinc-400/20",
+    brand: "text-neon bg-neon/10 border-neon/20",
   };
 
   return (
-    <div className={`bg-white dark:bg-zinc-900 p-6 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4 transition-all hover:shadow-xl hover:shadow-zinc-200/20 dark:hover:shadow-none relative ${className}`}>
+    <div className={`bg-white dark:bg-black p-6 rounded-[2.5rem] border border-zinc-100 dark:border-neon/10 flex flex-col gap-4 transition-all hover:shadow-xl dark:hover:shadow-neon/5 relative group overflow-hidden ${className}`}>
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+      
       {trend && (
-        <div className={`absolute top-6 right-6 text-[10px] font-black px-2.5 py-1 rounded-full ${trend.startsWith('+') ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+        <div className={`absolute top-6 right-6 text-[10px] font-black px-2.5 py-1 rounded-full ${trend.startsWith('+') ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
           {trend}
         </div>
       )}
       
       {Icon && (
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${colorMap[color]}`}>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${colorMap[color]} transition-transform group-hover:scale-110 duration-500`}>
           <Icon className="w-6 h-6" />
         </div>
       )}
       
       <div className="space-y-1">
-        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{label}</p>
-        <p className="text-2xl font-black text-zinc-900 dark:text-white tracking-tighter">{value}</p>
+        <p className="text-[10px] font-black text-zinc-400 dark:text-neon/40 uppercase tracking-widest">{label}</p>
+        <p className="text-2xl font-black text-zinc-900 dark:text-white tracking-tighter group-hover:text-neon transition-colors">{value}</p>
       </div>
     </div>
   );
@@ -4043,16 +4083,19 @@ function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any, label:
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative ${
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${
         active 
-          ? 'bg-zinc-900 text-white shadow-lg dark:bg-white dark:text-zinc-900' 
-          : 'text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900'
+          ? 'bg-neon text-black shadow-[0_0_20px_rgba(57,255,20,0.3)]' 
+          : 'text-zinc-500 hover:text-neon hover:bg-neon/5'
       }`}
     >
-      <Icon className={`w-5 h-5 transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
-      <span className="font-bold text-sm tracking-tight">{label}</span>
       {active && (
-        <div className="absolute right-4 w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-50"></div>
+      )}
+      <Icon className={`w-5 h-5 transition-all duration-300 ${active ? 'scale-110 rotate-3' : 'group-hover:scale-110 group-hover:rotate-3'}`} />
+      <span className="font-black text-[10px] uppercase tracking-widest">{label}</span>
+      {active && (
+        <div className="absolute right-4 w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
       )}
     </button>
   );
@@ -4074,7 +4117,7 @@ function TopBar({
   handleLogout: () => void
 }) {
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 bg-white dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-900">
+    <header className={`sticky top-0 z-30 flex items-center justify-between px-8 py-4 ${darkMode ? 'bg-black/80 backdrop-blur-md border-neon/10' : 'bg-white border-zinc-100'} border-b`}>
       <div className="flex items-center gap-4 flex-1 max-w-xl">
         <div className="relative w-full group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 group-focus-within:text-green-500 transition-colors" />
