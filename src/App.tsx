@@ -57,9 +57,14 @@ import {
   DollarSign,
   Filter,
   Search,
-  Clock
+  Clock,
+  Quote,
+  Star,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, 
   Bar, 
@@ -162,15 +167,15 @@ class ErrorBoundary extends Component<any, any> {
       } catch (e) {}
 
       return (
-        <div className="min-h-screen bg-zinc-100 flex items-center justify-center p-6 text-center">
+        <div className="min-h-screen bg-zinc-100 dark:bg-black flex items-center justify-center p-6 text-center transition-colors duration-500">
           <div className="max-w-md space-y-4">
-            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Activity className="w-8 h-8" />
             </div>
-            <h1 className="text-2xl font-bold text-zinc-900">Ops! Algo deu errado.</h1>
-            <p className="text-zinc-500">Ocorreu um erro inesperado no sistema.</p>
-            <div className="bg-white border border-zinc-200 p-4 rounded-xl text-left overflow-auto max-h-60 shadow-sm">
-              <p className="text-[10px] uppercase font-bold text-zinc-400 mb-2">Detalhes do Erro</p>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Ops! Algo deu errado.</h1>
+            <p className="text-zinc-500 dark:text-zinc-400">Ocorreu um erro inesperado no sistema.</p>
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl text-left overflow-auto max-h-60 shadow-sm">
+              <p className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 mb-2">Detalhes do Erro</p>
               <code className="text-xs text-red-500 block break-words">
                 {isJsonError ? (
                   <pre className="whitespace-pre-wrap">{JSON.stringify(JSON.parse(error.message), null, 2)}</pre>
@@ -182,13 +187,13 @@ class ErrorBoundary extends Component<any, any> {
             <div className="flex flex-col gap-2">
               <button 
                 onClick={() => window.location.reload()}
-                className="w-full px-6 py-3 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800 transition-colors shadow-lg shadow-zinc-900/20"
+                className="w-full px-6 py-3 bg-zinc-900 dark:bg-neon text-white dark:text-black font-bold rounded-xl hover:bg-zinc-800 dark:hover:bg-neon/80 transition-colors shadow-lg shadow-zinc-900/20 dark:shadow-neon/20"
               >
                 Recarregar Aplicativo
               </button>
               <button 
                 onClick={() => (this as any).setState({ hasError: false, error: null })}
-                className="w-full px-6 py-3 bg-white text-zinc-900 font-bold rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-colors"
+                className="w-full px-6 py-3 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
               >
                 Tentar Novamente
               </button>
@@ -258,7 +263,8 @@ function MainApp() {
   const [loadingObservations, setLoadingObservations] = useState('');
   const [isSubmittingLoading, setIsSubmittingLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deletingType, setDeletingType] = useState<'loading' | 'freight' | null>(null);
+  const [deletingType, setDeletingType] = useState<'loading' | 'freight' | 'branch' | 'user' | null>(null);
+  const [deletingError, setDeletingError] = useState<string | null>(null);
   const [transferringLoadingId, setTransferringLoadingId] = useState<string | null>(null);
   const [transferNewFreightId, setTransferNewFreightId] = useState<string>('');
   const [viewingFreightId, setViewingFreightId] = useState<string | null>(null);
@@ -294,8 +300,23 @@ function MainApp() {
   const [employeeRole, setEmployeeRole] = useState('');
   const [isSubmittingEmployee, setIsSubmittingEmployee] = useState(false);
 
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved === null ? true : saved === 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
   
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
   // Update unit price when freight changes
   useEffect(() => {
     if (selectedFreightId) {
@@ -350,6 +371,7 @@ function MainApp() {
   const [dashboardFilterStartDate, setDashboardFilterStartDate] = useState('');
   const [dashboardFilterEndDate, setDashboardFilterEndDate] = useState('');
   const [requestBranchId, setRequestBranchId] = useState('');
+  const [requesting, setRequesting] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [reportFilterStartDate, setReportFilterStartDate] = useState('');
   const [reportFilterEndDate, setReportFilterEndDate] = useState('');
@@ -534,6 +556,23 @@ function MainApp() {
     }
   };
 
+  const handleDeleteBranch = async (branchId: string) => {
+    if (userProfile?.role !== 'master') return;
+    setDeletingId(branchId);
+    setDeletingType('branch');
+  };
+
+  const confirmDeleteBranch = async (branchId: string) => {
+    const path = `branches/${branchId}`;
+    try {
+      await deleteDoc(doc(db, 'branches', branchId));
+      setDeletingId(null);
+      setDeletingType(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserEmail || !newUserName || !newUserBranchId || userProfile?.role !== 'master') return;
@@ -555,8 +594,9 @@ function MainApp() {
     }
   };
 
-  const handleRequestAccess = async (branchId: string) => {
-    if (!user || !branchId) return;
+  const handleRequestAccess = async () => {
+    if (!user || !requestBranchId) return;
+    setRequesting(true);
     setRequestError(null);
     const path = `users/${user.uid}`;
     try {
@@ -565,12 +605,15 @@ function MainApp() {
         email: user.email?.toLowerCase(),
         name: userProfile?.name || user.displayName || 'Usuário',
         role: 'user',
-        branchId: branchId,
+        branchId: requestBranchId,
         approved: true
       }, { merge: true });
-      fetchUserProfile(user.uid, user.email!, user.displayName || 'Usuário');
+      await fetchUserProfile(user.uid, user.email!, user.displayName || 'Usuário');
     } catch (error) {
+      setRequestError("Erro ao solicitar acesso. Tente novamente.");
       handleFirestoreError(error, OperationType.WRITE, path);
+    } finally {
+      setRequesting(false);
     }
   };
 
@@ -816,13 +859,23 @@ function MainApp() {
   const handleDeleteUser = async (userId: string) => {
     if (userProfile?.role !== 'master') return;
     if (userId === user?.uid) {
-      alert("Você não pode excluir seu próprio usuário master!");
+      setDeletingError("Você não pode excluir seu próprio usuário master!");
+      setDeletingId(userId);
+      setDeletingType('user');
       return;
     }
-    if (!window.confirm("Tem certeza que deseja excluir este usuário?")) return;
+    setDeletingId(userId);
+    setDeletingType('user');
+    setDeletingError(null);
+  };
+
+  const confirmDeleteUser = async (userId: string) => {
+    if (userId === user?.uid) return;
     const path = `users/${userId}`;
     try {
       await deleteDoc(doc(db, 'users', userId));
+      setDeletingId(null);
+      setDeletingType(null);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
@@ -1097,129 +1150,276 @@ function MainApp() {
   if (!user) {
     if (showLanding) {
       return (
-        <div className="min-h-screen bg-black text-white font-sans selection:bg-neon selection:text-black">
+        <div className="min-h-screen bg-black text-white font-sans selection:bg-neon selection:text-black overflow-x-hidden">
+          {/* Animated Background Elements */}
+          <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-neon/10 blur-[120px] rounded-full animate-pulse-slow" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/5 blur-[120px] rounded-full animate-pulse-slow" />
+          </div>
+
           {/* Header */}
-          <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-zinc-900">
-            <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-neon rounded-xl flex items-center justify-center shadow-lg shadow-neon/40">
-                  <Truck className="text-black w-6 h-6" />
-                </div>
-                <span className="text-xl font-bold tracking-tight text-white">Controle de Frete</span>
-              </div>
+          <motion.nav 
+            initial={{ y: -100 }}
+            animate={{ y: 0 }}
+            className="fixed top-0 left-0 right-0 z-50 bg-black/60 backdrop-blur-xl border-b border-white/5"
+          >
+            <div className="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
               <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-neon rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(57,255,20,0.3)] transform -rotate-6">
+                  <Truck className="text-black w-7 h-7" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-2xl font-black tracking-tighter text-white leading-none uppercase">Logística <span className="text-neon">Pro</span></span>
+                  <span className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.3em] mt-1">Enterprise Grade</span>
+                </div>
+              </div>
+              <div className="hidden lg:flex items-center gap-10">
+                {['Como Funciona', 'Benefícios', 'Comparativo'].map((item) => (
+                  <a 
+                    key={item}
+                    href={`#${item.toLowerCase().replace(' ', '-')}`} 
+                    className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] hover:text-neon transition-all hover:translate-y-[-2px]"
+                  >
+                    {item}
+                  </a>
+                ))}
+              </div>
+              <div className="flex items-center gap-6">
                 <button 
                   onClick={() => { setShowLanding(false); setAuthMode('login'); }}
-                  className="text-sm font-bold text-zinc-500 hover:text-neon transition-colors"
+                  className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] hover:text-white transition-colors"
                 >
                   Entrar
                 </button>
                 <button 
                   onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
-                  className="px-6 py-2.5 bg-neon text-black text-sm font-bold rounded-xl hover:bg-neon/90 transition-all shadow-lg shadow-neon/20"
+                  className="px-8 py-4 bg-white text-black text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-neon hover:shadow-[0_0_30px_rgba(57,255,20,0.4)] transition-all active:scale-95"
                 >
-                  Criar Conta
+                  Começar Agora
                 </button>
               </div>
             </div>
-          </nav>
+          </motion.nav>
 
           {/* Hero Section */}
-          <section className="pt-40 pb-20 px-6">
-            <div className="max-w-5xl mx-auto text-center space-y-8">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-neon/10 text-neon rounded-full text-xs font-bold uppercase tracking-wider border border-neon/20">
-                <Activity className="w-4 h-4" />
-                Gestão Logística Inteligente
-              </div>
-              <h1 className="text-6xl md:text-8xl font-black font-display tracking-tighter leading-[0.85] text-white">
-                A solução definitiva para seu <span className="text-neon">controle de frete.</span>
-              </h1>
-              <p className="text-xl text-zinc-500 max-w-2xl mx-auto leading-relaxed font-sans">
-                Gerencie múltiplas filiais, acompanhe carregamentos em tempo real e tenha controle financeiro total em uma única plataforma intuitiva.
-              </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                <button 
-                  onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
-                  className="w-full sm:w-auto px-10 py-5 bg-neon text-black font-bold rounded-2xl hover:bg-neon/90 transition-all shadow-2xl shadow-neon/40 flex items-center justify-center gap-3 group"
+          <section className="relative pt-52 pb-32 px-6 overflow-hidden">
+            <div className="absolute inset-0 bg-grid-neon opacity-20 [mask-image:radial-gradient(ellipse_at_center,black,transparent)]"></div>
+            
+            <div className="max-w-7xl mx-auto relative z-10">
+              <div className="flex flex-col items-center text-center space-y-12">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="inline-flex items-center gap-3 px-6 py-2.5 bg-zinc-900/50 backdrop-blur-md border border-white/10 rounded-full"
                 >
-                  Começar Agora Gratuitamente
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </button>
-                <button 
-                  onClick={() => { setShowLanding(false); setAuthMode('login'); }}
-                  className="w-full sm:w-auto px-10 py-5 bg-black text-neon font-bold rounded-2xl border border-neon/30 hover:border-neon hover:bg-neon/5 transition-all shadow-lg shadow-neon/5"
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neon opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-neon"></span>
+                  </span>
+                  <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">Novo: Gestão Multi-Filial 2.0</span>
+                </motion.div>
+
+                <motion.h1 
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className={`text-7xl md:text-[11rem] font-black font-display tracking-tighter leading-[0.85] uppercase transition-colors text-white`}
                 >
-                  Ver Demonstração
-                </button>
+                  Domine sua <br />
+                  <span className="neon-text-gradient">Logística.</span>
+                </motion.h1>
+
+                <motion.p 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className={`text-xl md:text-2xl max-w-3xl mx-auto leading-relaxed font-medium transition-colors text-zinc-500`}
+                >
+                  A plataforma definitiva para transportadoras que buscam <span className="text-white">escala milionária</span>. Controle cada centavo do seu frete com inteligência em tempo real.
+                </motion.p>
+
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="flex flex-col sm:flex-row items-center justify-center gap-8 pt-6"
+                >
+                  <button 
+                    onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
+                    className={`w-full sm:w-auto px-16 py-8 font-black uppercase tracking-[0.2em] text-sm rounded-[2rem] transition-all active:scale-95 flex items-center justify-center gap-4 group bg-neon text-black hover:shadow-[0_0_50px_rgba(57,255,20,0.5)]`}
+                  >
+                    Criar Conta Grátis
+                    <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
+                  </button>
+                  <button 
+                    onClick={() => { setShowLanding(false); setAuthMode('login'); }}
+                    className="w-full sm:w-auto px-16 py-8 bg-zinc-900/50 backdrop-blur-xl text-white font-black uppercase tracking-[0.2em] text-sm rounded-[2rem] border border-white/10 hover:border-neon/50 hover:bg-neon/5 transition-all"
+                  >
+                    Ver Demonstração
+                  </button>
+                </motion.div>
+
+                {/* Trust Bar */}
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.6 }}
+                  className="pt-24 space-y-8 w-full"
+                >
+                  <p className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em]">Confiado por gigantes do setor</p>
+                  <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-30 grayscale hover:grayscale-0 transition-all duration-700">
+                    {['LOGGI', 'FEDEX', 'DHL', 'MERCADO LIVRE', 'JSL'].map(brand => (
+                      <span key={brand} className="text-2xl font-black text-white tracking-tighter">{brand}</span>
+                    ))}
+                  </div>
+                </motion.div>
               </div>
-              
-              {/* Mock Dashboard Preview - Updated to match the provided image */}
-              <div className="pt-16">
-                <div className="relative mx-auto max-w-5xl bg-white rounded-[2.5rem] p-4 shadow-2xl shadow-green-500/10 overflow-hidden border border-zinc-100">
-                  <div className="bg-zinc-50 rounded-[2rem] aspect-[16/10] flex flex-col relative overflow-hidden border border-zinc-200">
-                    {/* Top Bar Mock */}
-                    <div className="h-16 bg-white border-b border-zinc-100 flex items-center justify-between px-6">
-                      <div className="w-48 h-8 bg-zinc-100 rounded-xl"></div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-24 h-6 bg-zinc-100 rounded-lg"></div>
-                        <div className="w-8 h-8 bg-green-500 rounded-lg"></div>
+            </div>
+          </section>
+
+          {/* Bento Grid Features */}
+          <section id="beneficios" className="py-40 px-6 relative bg-black">
+            <div className="max-w-7xl mx-auto space-y-24">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                <div className="space-y-4">
+                  <span className="font-black text-[10px] text-neon uppercase tracking-[0.4em]">Recursos Premium</span>
+                  <h2 className="text-5xl md:text-7xl font-black text-white tracking-tighter uppercase">Tecnologia de <br /> <span className="text-zinc-600">Ponta.</span></h2>
+                </div>
+                <p className="max-w-md text-zinc-500 text-lg font-medium">
+                  Desenvolvemos ferramentas específicas para resolver os gargalos financeiros da sua operação.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-6 grid-rows-2 gap-6 h-auto md:h-[800px]">
+                {/* Large Feature */}
+                <motion.div 
+                  whileHover={{ y: -10 }}
+                  className="md:col-span-3 md:row-span-2 bg-zinc-900/30 rounded-[3.5rem] border border-white/5 p-12 flex flex-col justify-between relative overflow-hidden group transition-all duration-300"
+                >
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-neon/10 blur-[80px] rounded-full group-hover:bg-neon/20 transition-all" />
+                  <div className="space-y-6 relative z-10">
+                    <div className="w-16 h-16 bg-neon rounded-2xl flex items-center justify-center shadow-lg shadow-neon/20">
+                      <TrendingUp className="text-black w-8 h-8" />
+                    </div>
+                    <h3 className="text-4xl font-black text-white uppercase tracking-tighter">Lucro Sobra™ <br /> Inteligente</h3>
+                    <p className="text-zinc-500 text-lg leading-relaxed max-w-sm">
+                      Algoritmo exclusivo que calcula sua margem líquida real descontando impostos, taxas e custos operacionais em tempo real.
+                    </p>
+                  </div>
+                  <div className="mt-12 relative z-10">
+                    <div className="bg-black/40 rounded-3xl p-6 border border-white/5 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-black text-zinc-500 uppercase tracking-widest">Margem Atual</span>
+                        <span className="text-neon font-black">+24.8%</span>
+                      </div>
+                      <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          whileInView={{ width: '74%' }}
+                          className="h-full bg-neon"
+                        />
                       </div>
                     </div>
-                    
-                    <div className="flex-1 flex">
-                      {/* Sidebar Mock */}
-                      <div className="w-48 bg-white border-r border-zinc-100 p-6 space-y-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-zinc-900 rounded-lg"></div>
-                          <div className="w-20 h-3 bg-zinc-900/10 rounded-full"></div>
+                  </div>
+                </motion.div>
+
+                {/* Medium Feature */}
+                <motion.div 
+                  whileHover={{ y: -10 }}
+                  className="md:col-span-3 bg-zinc-900/30 rounded-[3.5rem] border border-white/5 p-12 flex flex-col justify-between group transition-all duration-300"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 group-hover:border-neon/50 transition-all">
+                      <Users className="text-white w-7 h-7 group-hover:text-neon transition-colors" />
+                    </div>
+                    <span className="text-[10px] font-black text-neon/40 uppercase tracking-widest">Escalável</span>
+                  </div>
+                  <div className="space-y-4">
+                    <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Gestão Multi-Filial</h3>
+                    <p className="text-zinc-500 leading-relaxed">
+                      Controle centenas de unidades de negócio em uma única tela. Visão consolidada ou granular com um clique.
+                    </p>
+                  </div>
+                </motion.div>
+
+                {/* Small Features */}
+                <motion.div 
+                  whileHover={{ y: -10 }}
+                  className="md:col-span-1.5 bg-zinc-900/30 rounded-[3.5rem] border border-white/5 p-10 flex flex-col justify-center items-center text-center group transition-all duration-300"
+                >
+                  <ShieldCheck className="w-10 h-10 text-zinc-500 mb-6 group-hover:text-neon transition-all" />
+                  <h4 className="text-lg font-black text-white uppercase tracking-tighter">Segurança <br /> Bancária</h4>
+                </motion.div>
+
+                <motion.div 
+                  whileHover={{ y: -10 }}
+                  className="md:col-span-1.5 bg-zinc-900/30 rounded-[3.5rem] border border-white/5 p-10 flex flex-col justify-center items-center text-center group transition-all duration-300"
+                >
+                  <Zap className="w-10 h-10 text-zinc-500 mb-6 group-hover:text-neon transition-all" />
+                  <h4 className="text-lg font-black text-white uppercase tracking-tighter">Performance <br /> Ultra-Rápida</h4>
+                </motion.div>
+              </div>
+            </div>
+          </section>
+
+          {/* Comparison Section - Premium Dark Style */}
+          <section id="comparativo" className="py-40 px-6 relative bg-zinc-950 overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-neon/5 via-transparent to-transparent"></div>
+            <div className="max-w-6xl mx-auto relative z-10">
+              <div className="grid lg:grid-cols-2 gap-20 items-center">
+                <div className="space-y-10">
+                  <h2 className="text-6xl font-black text-white tracking-tighter uppercase leading-none">
+                    Por que os <br /> <span className="text-neon">Grandes</span> <br /> nos Escolhem?
+                  </h2>
+                  <p className="text-zinc-500 text-xl leading-relaxed font-medium">
+                    Planilhas são para amadores. O Logística Pro é para quem quer construir um império de transportes com dados precisos.
+                  </p>
+                  <div className="space-y-6">
+                    {[
+                      "Redução de 30% em custos operacionais",
+                      "Visibilidade total de fluxo de caixa",
+                      "Automação de manifestos e CTEs",
+                      "Suporte VIP dedicado 24/7"
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center gap-4">
+                        <div className="w-6 h-6 bg-neon/10 border border-neon/30 rounded-full flex items-center justify-center">
+                          <Check className="w-3 h-3 text-neon" />
                         </div>
-                        <div className="space-y-2 pt-4">
-                          <div className="h-8 w-full bg-zinc-50 rounded-lg"></div>
-                          <div className="h-8 w-full bg-zinc-50 rounded-lg"></div>
-                          <div className="h-8 w-full bg-zinc-50 rounded-lg"></div>
-                        </div>
+                        <span className="text-white font-bold uppercase tracking-widest text-xs">{item}</span>
                       </div>
-                      
-                      {/* Content Mock */}
-                      <div className="flex-1 p-8 space-y-8">
-                        {/* Quick Actions Mock */}
-                        <div className="grid grid-cols-4 gap-4">
-                          <div className="h-20 bg-white rounded-2xl border border-zinc-100 shadow-sm flex items-center p-4 gap-3">
-                            <div className="w-10 h-10 bg-green-50 rounded-xl"></div>
-                            <div className="w-16 h-3 bg-zinc-100 rounded-full"></div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="relative">
+                  <div className="absolute -inset-4 bg-neon/20 blur-3xl rounded-full opacity-20 animate-pulse"></div>
+                  <div className="bg-zinc-900/50 backdrop-blur-2xl rounded-[4rem] border border-white/10 p-12 shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1.5 bg-neon"></div>
+                    <div className="space-y-10">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-black text-zinc-500 uppercase tracking-widest">Relatório de Impacto</span>
+                        <div className="bg-neon/10 text-neon px-3 py-1 rounded-full text-[10px] font-black">LIVE</div>
+                      </div>
+                      <div className="space-y-8">
+                        <div className="flex items-end gap-4">
+                          <div className="flex-1 h-32 bg-zinc-800/50 rounded-2xl relative overflow-hidden">
+                            <motion.div 
+                              initial={{ height: 0 }}
+                              whileInView={{ height: '40%' }}
+                              className="absolute bottom-0 w-full bg-zinc-700"
+                            />
                           </div>
-                          <div className="h-20 bg-white rounded-2xl border border-zinc-100 shadow-sm flex items-center p-4 gap-3">
-                            <div className="w-10 h-10 bg-green-50 rounded-xl"></div>
-                            <div className="w-16 h-3 bg-zinc-100 rounded-full"></div>
-                          </div>
-                          <div className="h-20 bg-white rounded-2xl border border-zinc-100 shadow-sm flex items-center p-4 gap-3">
-                            <div className="w-10 h-10 bg-zinc-50 rounded-xl"></div>
-                            <div className="w-16 h-3 bg-zinc-100 rounded-full"></div>
-                          </div>
-                          <div className="h-20 bg-white rounded-2xl border border-zinc-100 shadow-sm flex items-center p-4 gap-3">
-                            <div className="w-10 h-10 bg-zinc-50 rounded-xl"></div>
-                            <div className="w-16 h-3 bg-zinc-100 rounded-full"></div>
+                          <div className="flex-1 h-48 bg-neon/10 rounded-2xl relative overflow-hidden border border-neon/20">
+                            <motion.div 
+                              initial={{ height: 0 }}
+                              whileInView={{ height: '85%' }}
+                              className="absolute bottom-0 w-full bg-neon shadow-[0_0_20px_rgba(57,255,20,0.5)]"
+                            />
                           </div>
                         </div>
-                        
-                        {/* Stats Mock */}
-                        <div className="grid grid-cols-4 gap-4">
-                          {[1, 2, 3, 4].map(i => (
-                            <div key={i} className="h-32 bg-white rounded-3xl border border-zinc-100 shadow-sm p-6 space-y-4">
-                              <div className="w-10 h-10 bg-zinc-50 rounded-xl"></div>
-                              <div className="w-20 h-4 bg-zinc-900/5 rounded-full"></div>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        {/* Financial Mock */}
-                        <div className="grid grid-cols-3 gap-4">
-                          {[1, 2, 3].map(i => (
-                            <div key={i} className="h-40 bg-white rounded-[2rem] border border-zinc-100 shadow-sm p-8 space-y-4">
-                              <div className="w-12 h-12 bg-zinc-50 rounded-2xl"></div>
-                              <div className="w-32 h-6 bg-zinc-900/5 rounded-full"></div>
-                            </div>
-                          ))}
+                        <div className="text-center">
+                          <p className="text-5xl font-black text-white tracking-tighter">+124%</p>
+                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mt-2">Aumento médio na eficiência</p>
                         </div>
                       </div>
                     </div>
@@ -1229,129 +1429,118 @@ function MainApp() {
             </div>
           </section>
 
-          {/* Benefits Section */}
-          <section className="py-32 bg-black px-6 relative overflow-hidden">
-            <div className="absolute top-0 left-1/4 w-96 h-96 bg-neon/5 blur-[120px] rounded-full" />
-            <div className="max-w-7xl mx-auto space-y-20 relative z-10">
-              <div className="text-center space-y-4">
-                <h2 className="text-4xl md:text-5xl font-black font-display tracking-tight text-white">Por que escolher o <span className="text-neon">Controle de Frete?</span></h2>
-                <p className="text-zinc-500 max-w-2xl mx-auto text-lg">Desenvolvido para simplificar a complexidade da logística moderna com tecnologia de ponta.</p>
+          {/* Testimonials - Elite Style */}
+          <section className="py-40 px-6 relative bg-black">
+            <div className="max-w-7xl mx-auto">
+              <div className="text-center mb-24">
+                <h2 className="text-5xl font-black text-white tracking-tighter uppercase">Vozes da <span className="text-neon">Elite</span></h2>
               </div>
-              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="grid md:grid-cols-3 gap-8">
                 {[
-                  { icon: <Users className="w-6 h-6" />, title: "Multi-Filial", desc: "Gerencie diversas unidades da sua empresa em um único painel centralizado." },
-                  { icon: <TrendingUp className="w-6 h-6" />, title: "Financeiro", desc: "Controle total de faturamento, pagamentos a motoristas e lucro líquido." },
-                  { icon: <Activity className="w-6 h-6" />, title: "Tempo Real", desc: "Acompanhe o status de cada frete e carregamento instantaneamente." },
-                  { icon: <FileText className="w-6 h-6" />, title: "Relatórios", desc: "Exporte relatórios detalhados em PDF para análise e prestação de contas." }
-                ].map((benefit, i) => (
-                  <div key={i} className="bg-black/40 backdrop-blur-sm p-10 rounded-[2.5rem] border border-neon/10 shadow-sm hover:border-neon/40 transition-all group relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-neon/5 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-neon/10 transition-colors" />
-                    <div className="w-14 h-14 bg-black text-neon border border-neon/20 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-neon group-hover:text-black transition-all duration-500 transform group-hover:rotate-6 shadow-lg shadow-neon/10">
-                      {benefit.icon}
+                  { name: "Ricardo Santos", role: "CEO, Santos Log", text: "O Logística Pro não é um custo, é o melhor investimento que já fiz. Recuperei o valor da assinatura em 15 dias apenas corrigindo pesos." },
+                  { name: "Ana Paula", role: "Diretora de Operações", text: "Finalmente um sistema que fala a língua do dono. Simples, rápido e focado no lucro que sobra no final do mês." },
+                  { name: "Marcos Oliveira", role: "Founder, TransGlobal", text: "Escalamos de 5 para 45 caminhões sem aumentar nossa equipe administrativa, graças à automação do sistema." }
+                ].map((t, i) => (
+                  <motion.div 
+                    key={i}
+                    whileHover={{ scale: 1.02 }}
+                    className="p-12 bg-zinc-900/20 rounded-[3.5rem] border border-white/5 relative group transition-all duration-300"
+                  >
+                    <Quote className="w-12 h-12 text-neon/10 absolute top-10 right-10 group-hover:text-neon/20 transition-all" />
+                    <div className="space-y-8">
+                      <div className="flex gap-1">
+                        {[1,2,3,4,5].map(s => <Star key={s} className="w-4 h-4 text-neon fill-current" />)}
+                      </div>
+                      <p className="text-zinc-400 text-xl font-medium leading-relaxed italic">"{t.text}"</p>
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-zinc-800 rounded-full border border-white/10" />
+                        <div>
+                          <p className="text-white font-black uppercase tracking-widest text-xs">{t.name}</p>
+                          <p className="text-neon/60 text-[9px] font-black uppercase tracking-widest">{t.role}</p>
+                        </div>
+                      </div>
                     </div>
-                    <h3 className="text-2xl font-bold text-white mb-3 font-display">{benefit.title}</h3>
-                    <p className="text-zinc-500 text-sm leading-relaxed font-sans">{benefit.desc}</p>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* Features Section */}
-          <section className="py-24 px-6 bg-black">
-            <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-              <div className="space-y-8">
-                <h2 className="text-5xl font-black tracking-tight leading-none text-white">Tudo o que você precisa para <span className="text-neon">escalar sua operação.</span></h2>
-                <div className="space-y-6">
-                  {[
-                    "Cadastro simplificado de fretes e carregamentos",
-                    "Gestão de motoristas e frotas por filial",
-                    "Cálculo automático de valores e margens",
-                    "Sistema de aprovação de novos usuários",
-                    "Painel administrativo master para controle total",
-                    "Interface moderna e responsiva (Mobile & Desktop)"
-                  ].map((feature, i) => (
-                    <div key={i} className="flex items-center gap-4">
-                      <div className="w-6 h-6 bg-neon/10 text-neon rounded-full flex items-center justify-center flex-shrink-0 border border-neon/20">
-                        <Check className="w-4 h-4" />
-                      </div>
-                      <span className="text-zinc-400 font-medium">{feature}</span>
-                    </div>
+          {/* Final CTA - High Impact */}
+          <section className="py-60 px-6 relative bg-grid-neon overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/90 to-black/0"></div>
+            <div className="max-w-5xl mx-auto relative z-10">
+              <motion.div 
+                whileInView={{ scale: [0.9, 1], opacity: [0, 1] }}
+                className="bg-zinc-900/40 backdrop-blur-3xl rounded-[5rem] p-20 md:p-32 text-center space-y-12 border border-white/10 shadow-[0_0_100px_rgba(57,255,20,0.1)] relative overflow-hidden"
+              >
+                <div className="absolute -top-24 -left-24 w-64 h-64 bg-neon/20 blur-[100px] rounded-full" />
+                <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-emerald-500/10 blur-[100px] rounded-full" />
+                
+                <h2 className="text-6xl md:text-8xl font-black text-white leading-none uppercase tracking-tighter">
+                  Sua Jornada <br /> <span className="text-neon">Milionária</span> <br /> Começa Aqui.
+                </h2>
+                <p className="text-zinc-400 text-2xl max-w-2xl mx-auto font-medium">
+                  Pare de gerenciar. Comece a dominar. O futuro da sua transportadora está a um clique de distância.
+                </p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-8 pt-8">
+                  <button 
+                    onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
+                    className="w-full sm:w-auto px-20 py-10 bg-neon text-black font-black uppercase tracking-[0.3em] text-sm rounded-[2.5rem] hover:shadow-[0_0_60px_rgba(57,255,20,0.6)] transition-all active:scale-95"
+                  >
+                    Criar Conta Grátis
+                  </button>
+                  <button 
+                    onClick={() => window.open('https://wa.me/5511999999999', '_blank')}
+                    className="w-full sm:w-auto px-20 py-10 bg-black text-white font-black uppercase tracking-[0.3em] text-sm rounded-[2.5rem] border border-white/10 hover:border-white/30 transition-all"
+                  >
+                    Falar com Especialista
+                  </button>
+                </div>
+                <div className="flex items-center justify-center gap-8 pt-12 opacity-50 grayscale">
+                  {['VISA', 'MASTERCARD', 'PIX', 'BOLETO'].map(m => <span key={m} className="text-white text-[10px] font-black tracking-widest">{m}</span>)}
+                </div>
+              </motion.div>
+            </div>
+          </section>
+
+          {/* Footer - Minimalist Elite */}
+          <footer className="py-32 px-6 bg-black border-t border-white/5">
+            <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-20">
+              <div className="col-span-2 space-y-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-neon rounded-xl flex items-center justify-center shadow-lg shadow-neon/40 transform -rotate-3">
+                    <Truck className="text-black w-6 h-6" />
+                  </div>
+                  <span className="text-xl font-black tracking-tighter text-white leading-none uppercase">Logística <span className="text-neon">Pro</span></span>
+                </div>
+                <p className="text-zinc-500 max-w-sm text-sm leading-relaxed font-medium">
+                  A plataforma de inteligência logística líder para transportadoras de alta performance. Tecnologia brasileira com padrão global.
+                </p>
+              </div>
+              <div className="space-y-6">
+                <h4 className="text-[10px] font-black text-white uppercase tracking-[0.4em]">Produto</h4>
+                <div className="flex flex-col gap-4">
+                  {['Recursos', 'Preços', 'Segurança', 'API'].map(item => (
+                    <a key={item} href="#" className="text-xs font-black text-zinc-600 hover:text-neon transition-colors uppercase tracking-widest">{item}</a>
                   ))}
                 </div>
-                <button 
-                  onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
-                  className="px-8 py-4 bg-neon text-black font-bold rounded-2xl hover:bg-neon/90 transition-all shadow-lg shadow-neon/20"
-                >
-                  Experimentar Agora
-                </button>
               </div>
-              <div className="relative">
-                <div className="aspect-square bg-black rounded-[4rem] overflow-hidden relative border border-neon/10">
-                  <img 
-                    src="https://picsum.photos/seed/logistics-dark/800/800" 
-                    alt="Logística" 
-                    className="w-full h-full object-cover opacity-40 grayscale"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-tr from-neon/20 to-transparent"></div>
-                  <div className="absolute bottom-8 left-8 right-8 bg-black/90 backdrop-blur p-8 rounded-3xl border border-neon/20 shadow-2xl">
-                    <div className="flex items-center gap-6">
-                      <div className="w-14 h-14 bg-neon rounded-2xl flex items-center justify-center text-black shadow-lg shadow-neon/30">
-                        <TrendingUp className="w-7 h-7" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Crescimento Mensal</p>
-                        <p className="text-3xl font-black text-white">+42.5%</p>
-                      </div>
-                    </div>
-                  </div>
+              <div className="space-y-6">
+                <h4 className="text-[10px] font-black text-white uppercase tracking-[0.4em]">Legal</h4>
+                <div className="flex flex-col gap-4">
+                  {['Privacidade', 'Termos', 'Cookies', 'Licença'].map(item => (
+                    <a key={item} href="#" className="text-xs font-black text-zinc-600 hover:text-neon transition-colors uppercase tracking-widest">{item}</a>
+                  ))}
                 </div>
               </div>
             </div>
-          </section>
-
-          {/* CTA Section */}
-          <section className="py-24 px-6 bg-black">
-            <div className="max-w-5xl mx-auto bg-black rounded-[3rem] p-12 md:p-20 text-center space-y-8 relative overflow-hidden border border-neon/20 shadow-2xl shadow-neon/5">
-              <div className="absolute top-0 left-0 w-full h-full opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-neon via-transparent to-transparent"></div>
-              <h2 className="text-4xl md:text-5xl font-black text-white leading-tight relative z-10">
-                Pronto para transformar sua logística?
-              </h2>
-              <p className="text-zinc-400 text-lg max-w-xl mx-auto relative z-10">
-                Junte-se a centenas de empresas que já otimizaram seus processos com o Controle de Frete.
-              </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 relative z-10">
-                <button 
-                  onClick={() => { setShowLanding(false); setAuthMode('signup'); }}
-                  className="w-full sm:w-auto px-10 py-5 bg-neon text-black font-bold rounded-2xl hover:bg-neon/90 transition-all shadow-xl shadow-neon/30"
-                >
-                  Criar Minha Conta Grátis
-                </button>
-                <button 
-                  onClick={() => { setShowLanding(false); setAuthMode('login'); }}
-                  className="w-full sm:w-auto px-10 py-5 bg-black text-white border border-neon/30 font-bold rounded-2xl hover:bg-neon/5 transition-all"
-                >
-                  Falar com Consultor
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* Footer */}
-          <footer className="py-12 border-t border-zinc-900 px-6 bg-black">
-            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-neon rounded-lg flex items-center justify-center">
-                  <Truck className="text-black w-5 h-5" />
-                </div>
-                <span className="font-bold text-white">Controle de Frete</span>
-              </div>
-              <p className="text-zinc-600 text-sm">© 2026 Controle de Frete. Todos os direitos reservados.</p>
-              <div className="flex items-center gap-6">
-                <a href="#" className="text-sm font-bold text-zinc-500 hover:text-neon transition-colors">Termos</a>
-                <a href="#" className="text-sm font-bold text-zinc-500 hover:text-neon transition-colors">Privacidade</a>
-                <a href="#" className="text-sm font-bold text-zinc-500 hover:text-neon transition-colors">Suporte</a>
+            <div className="max-w-7xl mx-auto pt-20 mt-20 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8">
+              <p className="text-zinc-700 text-[10px] font-black uppercase tracking-[0.3em]">© 2026 Logística Pro Enterprise. Todos os direitos reservados.</p>
+              <div className="flex gap-8">
+                {['TWITTER', 'LINKEDIN', 'INSTAGRAM'].map(s => (
+                  <a key={s} href="#" className="text-[10px] font-black text-zinc-700 hover:text-white transition-colors tracking-[0.2em]">{s}</a>
+                ))}
               </div>
             </div>
           </footer>
@@ -1360,101 +1549,106 @@ function MainApp() {
     }
 
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-6 selection:bg-neon selection:text-black font-sans">
-        <div className="max-w-md w-full bg-black rounded-[3rem] shadow-2xl p-12 space-y-10 border border-neon/20 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-neon shadow-[0_0_15px_rgba(0,255,0,0.5)]"></div>
+      <div className="min-h-screen bg-black flex items-center justify-center p-6 selection:bg-neon selection:text-black font-sans relative overflow-hidden">
+        {/* Background Glows */}
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-neon/10 blur-[150px] rounded-full animate-pulse-slow" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-emerald-500/5 blur-[150px] rounded-full animate-pulse-slow" />
+        
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full bg-zinc-900/40 backdrop-blur-3xl rounded-[4rem] shadow-2xl p-12 space-y-10 border border-white/5 relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon to-transparent"></div>
           
           <button 
             onClick={() => setShowLanding(true)}
-            className="absolute top-10 left-10 text-neon/50 hover:text-neon transition-colors p-2 bg-black border border-neon/10 rounded-xl"
+            className="absolute top-10 left-10 text-zinc-500 hover:text-neon transition-all p-2 bg-black/50 border border-white/5 rounded-xl group"
           >
-            <ArrowRight className="w-4 h-4 rotate-180" />
+            <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
           </button>
 
-          <div className="text-center space-y-3">
-            <div className="w-20 h-20 bg-neon rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-neon/40 transform rotate-3">
+          <div className="text-center space-y-4">
+            <div className="w-20 h-20 bg-neon rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(57,255,20,0.3)] transform rotate-6">
               <Truck className="text-black w-10 h-10" />
             </div>
-            <h1 className="text-3xl font-black text-white tracking-tighter uppercase">Controle de Frete</h1>
-            <p className="text-neon/60 font-medium tracking-widest text-[10px] uppercase">{authMode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta neon'}</p>
+            <h1 className="text-3xl font-black text-white tracking-tighter uppercase leading-none">Logística <span className="text-neon">Pro</span></h1>
+            <p className="text-zinc-500 font-black tracking-[0.2em] text-[10px] uppercase">{authMode === 'login' ? 'Bem-vindo de volta à elite' : 'Inicie sua jornada milionária'}</p>
           </div>
 
-          <form onSubmit={handleEmailAuth} className="space-y-5">
+          <form onSubmit={handleEmailAuth} className="space-y-6">
             {authMode === 'signup' && (
               <div className="space-y-2">
-                <label className="text-[10px] uppercase font-black text-neon/40 tracking-[0.2em] ml-1">Nome Completo</label>
+                <label className="text-[10px] uppercase font-black text-zinc-500 tracking-[0.2em] ml-2">Nome Completo</label>
                 <input 
                   type="text"
                   required
-                  className="w-full bg-black border border-neon/20 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
-                  placeholder="Seu nome"
+                  className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 py-5 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/5 transition-all placeholder:text-zinc-700"
+                  placeholder="Ex: Ricardo Santos"
                   value={authName}
                   onChange={(e) => setAuthName(e.target.value)}
                 />
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-[10px] uppercase font-black text-neon/40 tracking-[0.2em] ml-1">E-mail Corporativo</label>
+              <label className="text-[10px] uppercase font-black text-zinc-500 tracking-[0.2em] ml-2">E-mail Corporativo</label>
               <input 
                 type="email"
                 required
-                className="w-full bg-black border border-neon/20 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
-                placeholder="seu@email.com"
+                className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 py-5 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/5 transition-all placeholder:text-zinc-700"
+                placeholder="seu@empresa.com"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] uppercase font-black text-neon/40 tracking-[0.2em] ml-1">Senha Segura</label>
+              <label className="text-[10px] uppercase font-black text-zinc-500 tracking-[0.2em] ml-2">Senha de Acesso</label>
               <input 
                 type="password"
                 required
-                className="w-full bg-black border border-neon/20 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all"
+                className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 py-5 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/5 transition-all placeholder:text-zinc-700"
                 placeholder="••••••••"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
               />
             </div>
-            <button
+
+            <button 
               type="submit"
-              className="w-full py-5 bg-neon text-black font-black uppercase tracking-widest rounded-2xl hover:bg-neon/90 transition-all shadow-xl shadow-neon/20 active:scale-[0.98]"
+              className="w-full py-6 bg-neon text-black font-black uppercase tracking-[0.2em] text-xs rounded-2xl hover:shadow-[0_0_30px_rgba(57,255,20,0.4)] transition-all active:scale-95 mt-4"
             >
-              {authMode === 'login' ? 'Entrar no Sistema' : 'Finalizar Cadastro'}
+              {authMode === 'login' ? 'Acessar Plataforma' : 'Criar Conta Enterprise'}
             </button>
           </form>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-neon/10"></span>
-            </div>
-            <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
-              <span className="bg-black px-4 text-neon/30">Acesso Rápido</span>
-            </div>
+          <div className="relative py-4">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+            <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest"><span className="bg-zinc-900/40 px-4 text-zinc-600">Ou continue com</span></div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <button
+            <button 
               onClick={handleLogin}
-              className="py-4 bg-black border border-neon/10 text-white font-bold rounded-2xl hover:border-neon/50 transition-all flex items-center justify-center gap-3 group"
+              className="flex items-center justify-center gap-3 py-4 bg-black/50 border border-white/5 rounded-2xl hover:border-white/20 transition-all group"
             >
-              <img src="https://www.google.com/favicon.ico" className="w-5 h-5 grayscale group-hover:grayscale-0 transition-all" alt="Google" />
-              Google
+              <svg className="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Google</span>
             </button>
-            <button
+            <button 
               onClick={handleGithubLogin}
-              className="py-4 bg-black border border-neon/10 text-white font-bold rounded-2xl hover:border-neon/50 transition-all flex items-center justify-center gap-3 group"
+              className="flex items-center justify-center gap-3 py-4 bg-black/50 border border-white/5 rounded-2xl hover:border-white/20 transition-all group"
             >
-              <Users className="w-5 h-5 text-neon/40 group-hover:text-neon transition-all" />
-              GitHub
+              <svg className="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">GitHub</span>
             </button>
           </div>
 
           <div className="text-center">
             <button 
               onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-              className="text-xs font-black uppercase tracking-widest text-neon/40 hover:text-neon transition-colors"
+              className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-neon transition-colors"
             >
-              {authMode === 'login' ? 'Solicitar Acesso' : 'Já possuo conta'}
+              {authMode === 'login' ? 'Não tem conta? Crie agora' : 'Já tem conta? Entre aqui'}
             </button>
           </div>
 
@@ -1465,65 +1659,80 @@ function MainApp() {
           )}
           
           <div className="text-center pt-4">
-            <p className="text-[10px] text-neon/20 uppercase tracking-[0.3em] font-black">Logística de Alta Performance</p>
+            <p className="text-[10px] text-zinc-800 uppercase tracking-[0.3em] font-black">Logística de Alta Performance</p>
           </div>
-        </div>
+        </motion.div>
       </div>
     );
   }
 
   if (user && (!userProfile || (userProfile.role !== 'master' && !userProfile.branchId))) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-6 text-center">
-        <div className="max-w-md w-full bg-black rounded-[3rem] shadow-2xl p-12 space-y-10 border border-neon/20 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-neon shadow-[0_0_15px_rgba(0,255,0,0.5)]"></div>
+      <div className="min-h-screen bg-black flex items-center justify-center p-6 text-center relative overflow-hidden">
+        {/* Background Glows */}
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-neon/10 blur-[150px] rounded-full animate-pulse-slow" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-emerald-500/5 blur-[150px] rounded-full animate-pulse-slow" />
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-md w-full bg-zinc-900/40 backdrop-blur-3xl rounded-[4rem] shadow-2xl p-12 space-y-10 border border-white/5 relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon to-transparent"></div>
           
-          <div className="text-center space-y-3">
-            <div className="w-20 h-20 bg-neon rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-neon/40 transform rotate-3">
+          <div className="text-center space-y-4">
+            <div className="w-20 h-20 bg-neon rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(57,255,20,0.3)] transform rotate-6">
               <Truck className="text-black w-10 h-10" />
             </div>
-            <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Bem-vindo!</h2>
-            <p className="text-neon/60 font-medium tracking-widest text-[10px] uppercase">Selecione sua unidade de trabalho</p>
+            <h2 className="text-3xl font-black text-white tracking-tighter uppercase leading-none">Bem-vindo à <span className="text-neon">Elite</span></h2>
+            <p className="text-zinc-500 font-black tracking-[0.2em] text-[10px] uppercase">Selecione sua unidade operacional</p>
           </div>
           
-          <div className="space-y-4">
-            <div className="text-left">
-              <label className="text-[10px] uppercase font-black text-neon/40 tracking-[0.2em] ml-1">Sua Filial</label>
-              <select 
-                className="w-full bg-black border border-neon/20 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/10 transition-all appearance-none"
-                value={requestBranchId}
-                onChange={(e) => {
-                  setRequestBranchId(e.target.value);
-                  setRequestError(null);
-                }}
-              >
-                <option value="" className="bg-black text-white">Selecione uma filial...</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id} className="bg-black text-white">{b.name}</option>
-                ))}
-              </select>
+          <div className="space-y-6">
+            <div className="text-left space-y-2">
+              <label className="text-[10px] uppercase font-black text-zinc-500 tracking-[0.2em] ml-2">Unidade / Filial</label>
+              <div className="relative">
+                <select 
+                  className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 py-5 text-sm text-white outline-none focus:border-neon focus:ring-4 focus:ring-neon/5 transition-all appearance-none cursor-pointer"
+                  value={requestBranchId}
+                  onChange={(e) => {
+                    setRequestBranchId(e.target.value);
+                    setRequestError(null);
+                  }}
+                >
+                  <option value="" className="bg-zinc-900 text-white">Selecione uma filial...</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id} className="bg-zinc-900 text-white">{b.name}</option>
+                  ))}
+                </select>
+                <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                  <ArrowRight className="w-4 h-4 rotate-90" />
+                </div>
+              </div>
             </div>
 
-            {requestError && (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold">
-                {requestError}
-              </div>
-            )}
+            <button 
+              onClick={handleRequestAccess}
+              disabled={!requestBranchId || requesting}
+              className="w-full py-6 bg-neon text-black font-black uppercase tracking-[0.2em] text-xs rounded-2xl hover:shadow-[0_0_30px_rgba(57,255,20,0.4)] transition-all active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+            >
+              {requesting ? 'Processando...' : 'Solicitar Acesso à Unidade'}
+            </button>
 
             <button 
-              onClick={() => handleRequestAccess(requestBranchId)}
-              disabled={!requestBranchId}
-              className="w-full py-5 bg-neon text-black font-black uppercase tracking-widest rounded-2xl hover:bg-neon/90 transition-all shadow-xl shadow-neon/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => auth.signOut()}
+              className="text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:text-white transition-colors"
             >
-              Entrar no Sistema
+              Sair da Conta
             </button>
           </div>
-          
-          <div className="pt-6 border-t border-neon/10 flex flex-col gap-4">
-            <p className="text-[10px] text-neon/30 uppercase tracking-widest font-bold">E-mail logado: <span className="text-neon/60">{user.email}</span></p>
-            <button onClick={handleLogout} className="text-xs font-black uppercase tracking-widest text-neon/40 hover:text-neon transition-colors">Sair e tentar outro e-mail</button>
-          </div>
-        </div>
+
+          {requestError && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold text-center">
+              {requestError}
+            </div>
+          )}
+        </motion.div>
       </div>
     );
   }
@@ -1706,77 +1915,94 @@ function MainApp() {
   });
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-black text-white bg-grid-neon' : 'bg-zinc-50 text-zinc-900'} flex flex-col md:flex-row font-sans selection:bg-neon selection:text-black transition-colors duration-500`}>
+    <div className={`min-h-screen ${darkMode ? 'dark bg-black text-white bg-grid-neon' : 'bg-zinc-50 text-zinc-900 bg-grid-white'} flex flex-col md:flex-row font-sans selection:bg-neon selection:text-black transition-colors duration-500`}>
       {/* Sidebar */}
-      <aside className={`w-full md:w-64 ${darkMode ? 'bg-black border-neon/10' : 'bg-white border-zinc-200'} border-r flex flex-col transition-all duration-500 relative z-40 md:sticky md:top-0 md:h-screen overflow-y-auto`}>
-        <div className="p-8 flex items-center gap-3">
-          <div className="w-10 h-10 bg-neon rounded-xl flex items-center justify-center shadow-lg shadow-neon/40 transform -rotate-3">
-            <Truck className="w-6 h-6 text-black" />
+      <aside className={`w-full md:w-72 ${darkMode ? 'bg-zinc-950/50 backdrop-blur-3xl border-white/5' : 'bg-white border-zinc-200'} border-r flex flex-col transition-all duration-500 relative z-40 md:sticky md:top-0 md:h-screen overflow-y-auto shadow-2xl`}>
+        <div className="p-10 flex items-center gap-4">
+          <div className="w-12 h-12 bg-neon rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(57,255,20,0.3)] transform rotate-6 hover:rotate-0 transition-transform duration-500">
+            <Truck className="w-7 h-7 text-black" />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-zinc-900 dark:text-white font-black text-xl tracking-tighter leading-none">
+            <h1 className="text-zinc-900 dark:text-white font-black text-2xl tracking-tighter leading-none">
               Logística <span className="text-neon">Pro</span>
             </h1>
-            <span className="text-[8px] font-black text-zinc-400 dark:text-neon/40 uppercase tracking-[0.2em] mt-1">SISTEMA DE FRETE</span>
+            <span className="text-[9px] font-black text-zinc-400 dark:text-neon/40 uppercase tracking-[0.3em] mt-1.5">SaaS Enterprise</span>
           </div>
         </div>
         
-        <nav className="flex-1 px-4 space-y-1 mt-2">
-          <SidebarItem 
-            active={activeTab === 'dashboard'} 
-            icon={LayoutDashboard} 
-            label="Painel" 
-            onClick={() => setActiveTab('dashboard')}
-          />
-          <SidebarItem 
-            active={activeTab === 'faturamento'} 
-            icon={DollarSign} 
-            label="Faturamento" 
-            onClick={() => setActiveTab('faturamento')}
-          />
-          <SidebarItem 
-            active={activeTab === 'freights'} 
-            icon={ClipboardList} 
-            label="Fretes" 
-            onClick={() => setActiveTab('freights')}
-          />
-          <SidebarItem 
-            active={activeTab === 'loadings'} 
-            icon={Truck} 
-            label="Motoristas" 
-            onClick={() => setActiveTab('loadings')}
-          />
-          <SidebarItem 
-            active={activeTab === 'employees'} 
-            icon={Users} 
-            label="Funcionários" 
-            onClick={() => setActiveTab('employees')}
-          />
-          <SidebarItem 
-            active={activeTab === 'reports'} 
-            icon={FileText} 
-            label="Relatórios" 
-            onClick={() => setActiveTab('reports')}
-          />
-          {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
-            <SidebarItem 
-              active={activeTab === 'management'} 
-              icon={Activity} 
-              label="Gerenciamento" 
-              onClick={() => setActiveTab('management')}
-            />
-          )}
+        <nav className="flex-1 px-6 space-y-2 mt-4">
+          <div className="pb-4 px-2">
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Menu Principal</p>
+            <div className="space-y-1">
+              <SidebarItem 
+                active={activeTab === 'dashboard'} 
+                icon={LayoutDashboard} 
+                label="Painel de Controle" 
+                onClick={() => setActiveTab('dashboard')}
+              />
+              <SidebarItem 
+                active={activeTab === 'faturamento'} 
+                icon={DollarSign} 
+                label="Faturamento Elite" 
+                onClick={() => setActiveTab('faturamento')}
+              />
+            </div>
+          </div>
+
+          <div className="py-4 px-2">
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Operacional</p>
+            <div className="space-y-1">
+              <SidebarItem 
+                active={activeTab === 'freights'} 
+                icon={ClipboardList} 
+                label="Gestão de Fretes" 
+                onClick={() => setActiveTab('freights')}
+              />
+              <SidebarItem 
+                active={activeTab === 'loadings'} 
+                icon={Truck} 
+                label="Frota & Motoristas" 
+                onClick={() => setActiveTab('loadings')}
+              />
+            </div>
+          </div>
+
+          <div className="py-4 px-2">
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Administrativo</p>
+            <div className="space-y-1">
+              <SidebarItem 
+                active={activeTab === 'employees'} 
+                icon={Users} 
+                label="Equipe Interna" 
+                onClick={() => setActiveTab('employees')}
+              />
+              <SidebarItem 
+                active={activeTab === 'reports'} 
+                icon={FileText} 
+                label="Relatórios Avançados" 
+                onClick={() => setActiveTab('reports')}
+              />
+              {(userProfile?.role === 'admin' || userProfile?.role === 'master') && (
+                <SidebarItem 
+                  active={activeTab === 'management'} 
+                  icon={Activity} 
+                  label="Configurações Master" 
+                  onClick={() => setActiveTab('management')}
+                />
+              )}
+            </div>
+          </div>
         </nav>
 
-        <div className="p-4 mt-auto">
-          <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex items-center justify-center">
-                <UserIcon className="w-4 h-4 text-zinc-500" />
+        <div className="p-6 mt-auto">
+          <div className="bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-[2rem] p-6 shadow-xl group hover:border-neon/20 transition-all">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center group-hover:bg-neon group-hover:text-black transition-all">
+                <UserIcon className="w-6 h-6 text-zinc-400 group-hover:text-black" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{userProfile?.name}</p>
-                <p className="text-[10px] text-zinc-400 uppercase font-bold">{userProfile?.role}</p>
+                <p className="text-sm font-black text-zinc-900 dark:text-white truncate uppercase tracking-tighter">{userProfile?.name}</p>
+                <p className="text-[9px] text-neon/60 uppercase font-black tracking-widest mt-0.5">{userProfile?.role}</p>
               </div>
             </div>
           </div>
@@ -1784,7 +2010,11 @@ function MainApp() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-zinc-50 dark:bg-zinc-950">
+      <main className={`flex-1 flex flex-col min-w-0 ${darkMode ? 'bg-black' : 'bg-zinc-50'} relative overflow-hidden`}>
+        {/* Background Glows for Main Content */}
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-neon/5 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-500/5 blur-[120px] rounded-full pointer-events-none" />
+
         <TopBar 
           userProfile={userProfile}
           darkMode={darkMode}
@@ -1852,7 +2082,16 @@ function MainApp() {
                     {branches.map(b => (
                       <div key={b.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-black' : 'bg-zinc-50'}`}>
                         <span className={`text-sm font-medium ${darkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>{b.name}</span>
-                        <span className="text-[10px] font-bold text-neon uppercase tracking-widest">Ativa</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold text-neon uppercase tracking-widest">Ativa</span>
+                          <button 
+                            onClick={() => handleDeleteBranch(b.id)}
+                            className="p-2 text-zinc-500 hover:text-red-500 transition-colors"
+                            title="Excluir Filial"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2157,7 +2396,7 @@ function MainApp() {
                       <th className="pb-4">Margem</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  <tbody className={`divide-y ${darkMode ? 'divide-zinc-800' : 'divide-zinc-100'}`}>
                     {freights
                       .filter(f => !billingFilterFreightId || f.id === billingFilterFreightId)
                       .map(f => {
@@ -2209,7 +2448,7 @@ function MainApp() {
                       <th className="pb-4">Data</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  <tbody className={`divide-y ${darkMode ? 'divide-zinc-800' : 'divide-zinc-100'}`}>
                     {billingLoadings.sort((a, b) => {
                       const dateA = a.manifestoDate || a.date || '0000-00-00';
                       const dateB = b.manifestoDate || b.date || '0000-00-00';
@@ -2246,56 +2485,56 @@ function MainApp() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <button 
                   onClick={() => setActiveTab('freights')}
-                  className="flex items-center gap-4 p-5 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 hover:shadow-lg hover:shadow-zinc-200/20 dark:hover:shadow-none transition-all group"
+                  className={`flex items-center gap-4 p-5 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-100'} rounded-3xl hover:shadow-lg hover:shadow-zinc-200/20 dark:hover:shadow-none transition-all group`}
                 >
-                  <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Plus className="w-6 h-6 text-green-600" />
+                  <div className={`w-12 h-12 ${darkMode ? 'bg-green-500/10' : 'bg-green-50'} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <Plus className={`w-6 h-6 ${darkMode ? 'text-green-400' : 'text-green-600'}`} />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tighter">Novo Frete</p>
+                    <p className={`text-sm font-black ${darkMode ? 'text-white' : 'text-zinc-900'} uppercase tracking-tighter`}>Novo Frete</p>
                     <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Carga cadastral</p>
                   </div>
                 </button>
                 <button 
                   onClick={() => setActiveTab('loadings')}
-                  className="flex items-center gap-4 p-5 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 hover:shadow-lg hover:shadow-zinc-200/20 dark:hover:shadow-none transition-all group"
+                  className={`flex items-center gap-4 p-5 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-100'} rounded-3xl hover:shadow-lg hover:shadow-zinc-200/20 dark:hover:shadow-none transition-all group`}
                 >
-                  <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Truck className="w-6 h-6 text-green-600" />
+                  <div className={`w-12 h-12 ${darkMode ? 'bg-green-500/10' : 'bg-green-50'} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <Truck className={`w-6 h-6 ${darkMode ? 'text-green-400' : 'text-green-600'}`} />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tighter">Carregamento</p>
+                    <p className={`text-sm font-black ${darkMode ? 'text-white' : 'text-zinc-900'} uppercase tracking-tighter`}>Carregamento</p>
                     <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Vicular</p>
                   </div>
                 </button>
                 <button 
                   onClick={() => setActiveTab('reports')}
-                  className="flex items-center gap-4 p-5 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 hover:shadow-lg hover:shadow-zinc-200/20 dark:hover:shadow-none transition-all group"
+                  className={`flex items-center gap-4 p-5 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-100'} rounded-3xl hover:shadow-lg hover:shadow-zinc-200/20 dark:hover:shadow-none transition-all group`}
                 >
-                  <div className="w-12 h-12 bg-zinc-50 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <FileText className="w-6 h-6 text-zinc-500" />
+                  <div className={`w-12 h-12 ${darkMode ? 'bg-zinc-800' : 'bg-zinc-50'} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <FileText className={`w-6 h-6 ${darkMode ? 'text-zinc-400' : 'text-zinc-500'}`} />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tighter">Relatórios</p>
+                    <p className={`text-sm font-black ${darkMode ? 'text-white' : 'text-zinc-900'} uppercase tracking-tighter`}>Relatórios</p>
                     <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Exportar dados</p>
                   </div>
                 </button>
                 <button 
                   onClick={() => setActiveTab('faturamento')}
-                  className="flex items-center gap-4 p-5 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 hover:shadow-lg hover:shadow-zinc-200/20 dark:hover:shadow-none transition-all group"
+                  className={`flex items-center gap-4 p-5 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-100'} rounded-3xl hover:shadow-lg hover:shadow-zinc-200/20 dark:hover:shadow-none transition-all group`}
                 >
-                  <div className="w-12 h-12 bg-zinc-50 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <DollarSign className="w-6 h-6 text-zinc-500" />
+                  <div className={`w-12 h-12 ${darkMode ? 'bg-zinc-800' : 'bg-zinc-50'} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <DollarSign className={`w-6 h-6 ${darkMode ? 'text-zinc-400' : 'text-zinc-500'}`} />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tighter">Faturamento</p>
+                    <p className={`text-sm font-black ${darkMode ? 'text-white' : 'text-zinc-900'} uppercase tracking-tighter`}>Faturamento</p>
                     <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Financeiro</p>
                   </div>
                 </button>
               </div>
 
               {/* Dashboard Filters */}
-              <div className={`flex flex-wrap items-end gap-6 p-8 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2.5rem] shadow-sm transition-colors`}>
+              <div className={`flex flex-wrap items-end gap-6 p-8 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-100'} rounded-[2.5rem] shadow-sm transition-colors`}>
                 <div className="flex items-center gap-2 mb-1">
                   <Filter className="w-4 h-4 text-green-500" />
                   <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Filtros Gerais</span>
@@ -2694,13 +2933,13 @@ function MainApp() {
                       placeholder="Buscar fretes..."
                       value={freightSearch}
                       onChange={(e) => setFreightSearch(e.target.value)}
-                      className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 w-64"
+                      className={`bg-white ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'border-zinc-200'} rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/20 w-64`}
                     />
                   </div>
                   <select 
                     value={freightFilterStatus}
                     onChange={(e) => setFreightFilterStatus(e.target.value as any)}
-                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/20"
+                    className={`bg-white ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'border-zinc-200'} rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500/20`}
                   >
                     <option value="Todos">Todos Status</option>
                     <option value="Aberto">Aberto</option>
@@ -3936,8 +4175,14 @@ function MainApp() {
             </div>
             
             <p className={`${darkMode ? 'text-zinc-400' : 'text-zinc-500'} leading-relaxed`}>
-              {deletingType === 'freight' 
+              {deletingError ? (
+                <span className="text-red-500 font-bold">{deletingError}</span>
+              ) : deletingType === 'freight' 
                 ? "Tem certeza que deseja excluir este frete? Todos os registros de motoristas vinculados perderão a referência."
+                : deletingType === 'branch'
+                ? "Tem certeza que deseja excluir esta filial? Esta ação não pode ser desfeita."
+                : deletingType === 'user'
+                ? "Tem certeza que deseja excluir este usuário?"
                 : "Tem certeza que deseja excluir este registro de motorista?"}
             </p>
 
@@ -3955,11 +4200,16 @@ function MainApp() {
                 onClick={() => {
                   if (deletingType === 'freight') {
                     deleteFreight(deletingId);
+                  } else if (deletingType === 'branch') {
+                    confirmDeleteBranch(deletingId);
+                  } else if (deletingType === 'user') {
+                    confirmDeleteUser(deletingId);
                   } else {
                     deleteLoading(deletingId);
                   }
                 }}
-                className="flex-1 px-6 py-3 bg-red-500 text-white font-bold rounded-2xl hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                className="flex-1 px-6 py-3 bg-red-500 text-white font-bold rounded-2xl hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 disabled:opacity-50 disabled:grayscale"
+                disabled={!!deletingError}
               >
                 Excluir
               </button>
@@ -3998,51 +4248,56 @@ function SummaryCard({
   className?: string
 }) {
   const colorMap = {
-    green: "text-green-500 bg-green-500/10 border-green-500/20",
-    red: "text-red-500 bg-red-500/10 border-red-500/20",
-    blue: "text-blue-500 bg-blue-500/10 border-blue-500/20",
+    green: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
+    red: "text-rose-500 bg-rose-500/10 border-rose-500/20",
+    blue: "text-sky-500 bg-sky-500/10 border-sky-500/20",
     zinc: "text-zinc-400 bg-zinc-400/10 border-zinc-400/20",
     brand: "text-neon bg-neon/10 border-neon/20",
   };
 
   return (
-    <div className={`bg-white dark:bg-black p-6 rounded-[2.5rem] border border-zinc-100 dark:border-neon/10 flex flex-col gap-4 transition-all hover:shadow-xl dark:hover:shadow-neon/5 relative group overflow-hidden ${className}`}>
-      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -5 }}
+      className={`${darkMode ? 'bg-zinc-900/40 border-white/5' : 'bg-white border-zinc-100'} backdrop-blur-xl p-6 rounded-[2.5rem] flex flex-col gap-4 transition-all hover:shadow-2xl dark:hover:shadow-neon/10 relative group overflow-hidden ${className}`}
+    >
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
       
       {trend && (
-        <div className={`absolute top-6 right-6 text-[10px] font-black px-2.5 py-1 rounded-full ${trend.startsWith('+') ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+        <div className={`absolute top-6 right-6 text-[10px] font-black px-3 py-1 rounded-full ${trend.startsWith('+') ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
           {trend}
         </div>
       )}
       
       {Icon && (
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${colorMap[color]} transition-transform group-hover:scale-110 duration-500`}>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${colorMap[color]} transition-all group-hover:scale-110 group-hover:rotate-3 duration-500 shadow-sm`}>
           <Icon className="w-6 h-6" />
         </div>
       )}
       
       <div className="space-y-1">
-        <p className="text-[10px] font-black text-zinc-400 dark:text-neon/40 uppercase tracking-widest">{label}</p>
-        <p className="text-2xl font-black text-zinc-900 dark:text-white tracking-tighter group-hover:text-neon transition-colors">{value}</p>
+        <p className={`text-[10px] font-black ${darkMode ? 'text-zinc-500' : 'text-zinc-400'} uppercase tracking-[0.2em]`}>{label}</p>
+        <p className={`text-3xl font-black ${darkMode ? 'text-white' : 'text-zinc-900'} tracking-tighter group-hover:text-neon transition-colors duration-300`}>{value}</p>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
   const getStyles = () => {
     switch (status) {
-      case 'Aberto': return 'bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400';
-      case 'Finalizado': return 'bg-green-100 text-green-600 dark:bg-green-500/10 dark:text-green-400';
-      case 'Cancelado': return 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400';
-      case 'Manifesto': return 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400';
-      case 'Descarregado': return 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400';
-      default: return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-500/10 dark:text-zinc-400';
+      case 'Aberto': return 'bg-sky-500/10 text-sky-500 border-sky-500/20';
+      case 'Finalizado': return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+      case 'Cancelado': return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+      case 'Manifesto': return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+      case 'Descarregado': return 'bg-teal-500/10 text-teal-500 border-teal-500/20';
+      default: return 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20';
     }
   };
 
   return (
-    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStyles()}`}>
+    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border ${getStyles()}`}>
       {status}
     </span>
   );
@@ -4086,19 +4341,26 @@ function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any, label:
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${
+      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-300 group relative overflow-hidden ${
         active 
-          ? 'bg-neon text-black shadow-[0_0_20px_rgba(57,255,20,0.3)]' 
+          ? 'bg-neon text-black shadow-[0_0_25px_rgba(57,255,20,0.4)]' 
           : 'text-zinc-500 hover:text-neon hover:bg-neon/5'
       }`}
     >
       {active && (
-        <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-50"></div>
+        <motion.div 
+          layoutId="sidebar-active"
+          className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent"
+        />
       )}
-      <Icon className={`w-5 h-5 transition-all duration-300 ${active ? 'scale-110 rotate-3' : 'group-hover:scale-110 group-hover:rotate-3'}`} />
-      <span className="font-black text-[10px] uppercase tracking-widest">{label}</span>
+      <Icon className={`w-5 h-5 transition-all duration-500 ${active ? 'scale-110 rotate-3' : 'group-hover:scale-110 group-hover:rotate-3'}`} />
+      <span className="font-black text-[10px] uppercase tracking-[0.2em]">{label}</span>
       {active && (
-        <div className="absolute right-4 w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+        <motion.div 
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="absolute right-4 w-1.5 h-1.5 rounded-full bg-black shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
+        />
       )}
     </button>
   );
@@ -4120,46 +4382,47 @@ function TopBar({
   handleLogout: () => void
 }) {
   return (
-    <header className={`sticky top-0 z-30 flex items-center justify-between px-8 py-4 ${darkMode ? 'bg-black/80 backdrop-blur-md border-neon/10' : 'bg-white border-zinc-100'} border-b`}>
-      <div className="flex items-center gap-4 flex-1 max-w-xl">
+    <header className={`sticky top-0 z-30 flex items-center justify-between px-10 py-6 ${darkMode ? 'bg-black/60 backdrop-blur-3xl border-white/5' : 'bg-white border-zinc-100'} border-b transition-all duration-500`}>
+      <div className="flex items-center gap-6 flex-1 max-w-2xl">
         <div className="relative w-full group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 group-focus-within:text-green-500 transition-colors" />
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-neon transition-colors duration-300" />
           <input 
             type="text" 
-            placeholder="Pesquisar fretes, motoristas, placas..." 
+            placeholder="Pesquisar inteligência operacional..." 
             value={globalSearch}
             onChange={(e) => setGlobalSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500/10 transition-all"
+            className={`w-full pl-16 pr-6 py-4 ${darkMode ? 'bg-zinc-900/40 border-white/5 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-900'} border rounded-[1.5rem] text-sm outline-none focus:border-neon/30 focus:ring-8 focus:ring-neon/5 transition-all placeholder:text-zinc-600 font-medium`}
           />
         </div>
       </div>
       
-      <div className="flex items-center gap-6 ml-8">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-8 ml-10">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => setDarkMode(!darkMode)}
-            className="p-2.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl transition-colors"
-            title={darkMode ? "Modo Claro" : "Modo Escuro"}
+            className="p-3.5 text-zinc-500 hover:text-neon hover:bg-neon/5 rounded-2xl transition-all duration-300 border border-transparent hover:border-neon/10"
+            title={darkMode ? "Ativar Modo Visão Diurna" : "Ativar Modo Visão Noturna"}
           >
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            {darkMode ? <Sun className="w-5.5 h-5.5" /> : <Moon className="w-5.5 h-5.5" />}
           </button>
+          
           <button 
             onClick={handleLogout}
-            className="p-2.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
-            title="Sair do Sistema"
+            className="p-3.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/5 rounded-2xl transition-all duration-300 border border-transparent hover:border-red-500/10 group"
+            title="Encerrar Sessão de Elite"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-5.5 h-5.5 group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
         
-        <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800" />
+        <div className="h-8 w-px bg-white/5" />
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
-            <p className="text-sm font-black text-zinc-900 dark:text-white leading-none">{userProfile?.name}</p>
-            <p className="text-[10px] uppercase font-black text-zinc-400 mt-1 tracking-widest">Mestre</p>
+            <p className={`text-sm font-black ${darkMode ? 'text-white' : 'text-zinc-900'} leading-none uppercase tracking-tighter`}>{userProfile?.name}</p>
+            <p className="text-[9px] uppercase font-black text-neon/60 mt-1 tracking-widest">{userProfile?.role}</p>
           </div>
-          <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-green-500/20">
+          <div className="w-12 h-12 bg-neon rounded-2xl flex items-center justify-center text-black font-black shadow-[0_0_20px_rgba(57,255,20,0.2)] transform hover:rotate-3 transition-transform">
             {userProfile?.name?.charAt(0).toUpperCase() || 'U'}
           </div>
         </div>
