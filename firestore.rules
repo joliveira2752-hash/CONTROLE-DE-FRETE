@@ -113,16 +113,17 @@ service cloud.firestore {
     function isValidUser(data) {
       return hasOnlyAllowedFields(['email', 'name', 'role', 'branchId', 'approved', 'created_at']) &&
              isValidEmail(data.email) &&
+             data.name is string && data.name.size() < 100 &&
              data.role in ['master', 'admin', 'user'];
     }
 
     function isValidFreight(data) {
       return hasOnlyAllowedFields(['branchId', 'description', 'product', 'origin', 'destination', 'totalWeight', 'status', 'date', 'observations', 'valorFrete', 'valorRecebido', 'valorPagoMotorista']) &&
              data.branchId is string &&
-             data.description is string &&
-             data.product is string &&
-             data.origin is string &&
-             data.destination is string &&
+             data.description is string && data.description.size() < 500 &&
+             data.product is string && data.product.size() < 100 &&
+             data.origin is string && data.origin.size() < 200 &&
+             data.destination is string && data.destination.size() < 200 &&
              data.totalWeight is number &&
              data.status in ['Aberto', 'Carregando', 'Finalizado', 'Cancelado'];
     }
@@ -131,15 +132,15 @@ service cloud.firestore {
       return hasOnlyAllowedFields(['branchId', 'freightId', 'driverName', 'plate', 'weight', 'manifestoDone', 'unloaded', 'date', 'manifestoDate', 'unloadedDate', 'observations', 'orderGiverId', 'orderGiverName', 'driverUnitPrice', 'driverValue']) &&
              data.branchId is string &&
              data.freightId is string &&
-             data.driverName is string &&
-             data.plate is string &&
+             data.driverName is string && data.driverName.size() < 100 &&
+             data.plate is string && data.plate.size() < 20 &&
              data.weight is number;
     }
 
     function isValidEmployee(data) {
       return hasOnlyAllowedFields(['branchId', 'name', 'role', 'active']) &&
              data.branchId is string &&
-             data.name is string;
+             data.name is string && data.name.size() < 100;
     }
 
     // ===============================================================
@@ -153,9 +154,11 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == 'user' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == resource.data.role || isAdmin());
       allow delete: if isMaster();
     }
 

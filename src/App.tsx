@@ -404,7 +404,8 @@ function MainApp() {
             email: email,
             role: 'master',
             name: name || 'Master Admin',
-            approved: true
+            approved: true,
+            created_at: new Date().toISOString()
           };
           await setDoc(userDocRef, masterProfile);
           setUserProfile(masterProfile);
@@ -543,7 +544,8 @@ function MainApp() {
         name: newUserName,
         role: newUserRole,
         branchId: newUserBranchId,
-        approved: true
+        approved: true,
+        created_at: new Date().toISOString()
       });
       setNewUserEmail('');
       setNewUserName('');
@@ -687,7 +689,8 @@ function MainApp() {
           email: authEmail,
           name: authName || 'Novo Usuário',
           role: 'user',
-          approved: true
+          approved: true,
+          created_at: new Date().toISOString()
         };
         await setDoc(userDocRef, newUserProfile);
         

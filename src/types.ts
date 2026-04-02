@@ -13,6 +13,7 @@ export interface UserProfile {
   name: string;
   companyName?: string;
   approved?: boolean;
+  created_at?: string;
 }
 
 export interface Freight {
@@ -23,7 +24,7 @@ export interface Freight {
   origin: string;
   destination: string;
   totalWeight: number;
-  status: 'Aberto' | 'Finalizado';
+  status: 'Aberto' | 'Carregando' | 'Finalizado' | 'Cancelado';
   date: string;
   observations?: string;
   valorFrete?: number; // Preço unitário empresa (R$/kg)
