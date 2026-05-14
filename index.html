@@ -27,7 +27,7 @@
         if (loadingScreen && !window.appInitialized) {
           var errorDiv = document.getElementById('error-msg');
           if (errorDiv && errorDiv.innerHTML === '') {
-            errorDiv.innerHTML = 'O carregamento está demorando mais que o normal.<br><b>DICA:</b> Certifique-se de que você copiou os ARQUIVOS de dentro da pasta "public_html" para a "public_html" da Hostinger, e não a pasta inteira.';
+            errorDiv.innerHTML = 'O carregamento está demorando mais que o normal.<br><b>DICA:</b> Certifique-se de que você copiou os ARQUIVOS de dentro da pasta "dist" para a "public_html" da Hostinger, e não a pasta inteira.';
           }
         }
       }, 10000);
