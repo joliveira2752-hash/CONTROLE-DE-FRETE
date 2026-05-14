@@ -2272,24 +2272,28 @@ function MainApp() {
                 value={`R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
                 color="green" 
                 icon={DollarSign}
+                darkMode={darkMode}
               />
               <SummaryCard 
                 label="Total Pago" 
                 value={`R$ ${totalDriverPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
                 color="red" 
                 icon={DollarSign}
+                darkMode={darkMode}
               />
               <SummaryCard 
                 label="Lucro Líquido" 
                 value={`R$ ${netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
                 color="blue" 
                 icon={TrendingUp}
+                darkMode={darkMode}
               />
               <SummaryCard 
                 label="Margem" 
                 value={`${profitMargin.toFixed(1)}%`} 
                 color={profitMargin > 0 ? "green" : "red"} 
                 icon={Activity}
+                darkMode={darkMode}
               />
             </section>
 
@@ -2581,6 +2585,7 @@ function MainApp() {
                   value={`R$ ${totalPlanned.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
                   icon={ClipboardList}
                   color="green"
+                  darkMode={darkMode}
                 />
                 <SummaryCard 
                   label="TOTAL EM PESOS" 
@@ -2588,24 +2593,28 @@ function MainApp() {
                   icon={Weight}
                   trend="+12%"
                   color="zinc"
+                  darkMode={darkMode}
                 />
                 <SummaryCard 
                   label="FRETES ABERTOS" 
                   value={openFreights.toString()} 
                   icon={ClipboardList}
                   color="green"
+                  darkMode={darkMode}
                 />
                 <SummaryCard 
                   label="MANIFESTOS PENDENTES" 
                   value={pendingManifesto.toString()} 
                   icon={FileText}
                   color="red"
+                  darkMode={darkMode}
                 />
                 <SummaryCard 
                   label="VIAGENS FINALIZADAS" 
                   value={totalCompleted.toString()} 
                   icon={CheckCircle2}
                   color="green"
+                  darkMode={darkMode}
                 />
               </div>
 
@@ -2616,12 +2625,14 @@ function MainApp() {
                   value={`R$ ${(dashboardTotalRevenue || 92152.80).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
                   icon={TrendingUp}
                   color="green"
+                  darkMode={darkMode}
                 />
                 <SummaryCard 
                   label="PAGO MOTORISTAS" 
                   value={`R$ ${(dashboardTotalDriverPayout || 158248.60).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
                   icon={TrendingUp}
                   color="red"
+                  darkMode={darkMode}
                 />
                 <SummaryCard 
                   label="LUCRO SOBRA" 
@@ -2629,6 +2640,7 @@ function MainApp() {
                   icon={DollarSign}
                   color="green"
                   trend="-71,7%"
+                  darkMode={darkMode}
                 />
               </div>
 
@@ -4238,14 +4250,16 @@ function SummaryCard({
   icon: Icon, 
   trend, 
   color = "zinc",
-  className = "" 
+  className = "",
+  darkMode
 }: { 
   label: string, 
   value: string, 
   icon?: any, 
   trend?: string, 
   color?: "green" | "red" | "blue" | "zinc" | "brand",
-  className?: string
+  className?: string,
+  darkMode: boolean
 }) {
   const colorMap = {
     green: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
